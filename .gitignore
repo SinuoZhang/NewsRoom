@@ -13,3 +13,5 @@ frontend/tsconfig.tsbuildinfo
 logs/
 
 .venv/
+
+.env
