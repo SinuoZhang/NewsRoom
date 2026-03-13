@@ -6,6 +6,9 @@ backend/.env
 backend/newsroom.db
 newsroom.db
 backend/app/**/__pycache__/
+.env
+.env.*
+!.env.example
 frontend/node_modules/
 frontend/dist/
 frontend/tsconfig.tsbuildinfo
