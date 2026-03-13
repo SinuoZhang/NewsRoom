@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.DS_Store
+
+backend/.env
+backend/newsroom.db
+newsroom.db
+backend/app/**/__pycache__/
+frontend/node_modules/
+frontend/dist/
+frontend/tsconfig.tsbuildinfo
+
+logs/
+
+.venv/
