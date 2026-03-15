@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import csv
+import random
+import re
 from datetime import datetime, timedelta
 from io import StringIO
 from typing import Any
@@ -10,6 +12,7 @@ import requests
 from app.core.config import get_settings
 
 _cache: dict[str, tuple[datetime, dict[str, Any]]] = {}
+_sitemap_cache: tuple[datetime, list[str]] | None = None
 
 
 def get_owid_series(indicator: str, entity: str | None = None, limit: int = 240) -> dict[str, Any]:
@@ -43,7 +46,7 @@ def get_owid_series(indicator: str, entity: str | None = None, limit: int = 240)
         _cache[cache_key] = (datetime.utcnow(), out)
         return out
 
-    value_col = _detect_value_column(reader.fieldnames or [])
+    value_col = _detect_value_column(list(reader.fieldnames or []))
     unit = rows[0].get("Unit") or None
 
     filtered: list[dict[str, Any]] = []
@@ -86,6 +89,85 @@ def get_owid_series(indicator: str, entity: str | None = None, limit: int = 240)
     }
     _cache[cache_key] = (datetime.utcnow(), out)
     return out
+
+
+def get_owid_random_modules(count: int = 10, points_limit: int = 40) -> list[dict[str, Any]]:
+    slugs = _get_owid_grapher_slugs()
+    if not slugs:
+        return []
+
+    target = max(1, min(count, 20))
+    modules: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    tries = 0
+    max_tries = target * 12
+    while len(modules) < target and tries < max_tries:
+        tries += 1
+        slug = random.choice(slugs)
+        if slug in seen:
+            continue
+        seen.add(slug)
+        try:
+            module = _build_random_module_from_slug(slug, points_limit)
+        except Exception:
+            continue
+        if module:
+            modules.append(module)
+
+    return modules
+
+
+def _build_random_module_from_slug(slug: str, points_limit: int) -> dict[str, Any] | None:
+    series = get_owid_series(indicator=slug, entity=None, limit=0)
+    points = series.get("points") or []
+    if not points:
+        return None
+
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for p in points:
+        ent = str(p.get("entity") or "").strip()
+        if not ent:
+            continue
+        grouped.setdefault(ent, []).append(p)
+
+    candidates = [k for k, vals in grouped.items() if len(vals) >= 2]
+    if not candidates:
+        return None
+
+    entity = random.choice(candidates)
+    entity_points = sorted(grouped[entity], key=lambda x: x.get("year", 0))[-max(2, points_limit):]
+
+    return {
+        "indicator": slug,
+        "entity": entity,
+        "title": _humanize_slug(slug),
+        "source_url": f"{get_settings().owid_base_url.rstrip('/')}/{slug}.csv",
+        "page_url": f"https://ourworldindata.org/grapher/{slug}?tab=chart",
+        "unit": series.get("unit"),
+        "points": entity_points,
+        "fetched_at": datetime.utcnow().isoformat(),
+    }
+
+
+def _get_owid_grapher_slugs() -> list[str]:
+    global _sitemap_cache
+    now = datetime.utcnow()
+    if _sitemap_cache and (now - _sitemap_cache[0]) < timedelta(hours=6):
+        return _sitemap_cache[1]
+
+    text = requests.get("https://ourworldindata.org/sitemap.xml", timeout=25).text
+    urls = re.findall(r"https://ourworldindata\.org/grapher/([a-z0-9\-]+)", text)
+    slugs = sorted(set(urls))
+    _sitemap_cache = (now, slugs)
+    return slugs
+
+
+def _humanize_slug(slug: str) -> str:
+    if not slug:
+        return "OWID Indicator"
+    words = [w for w in slug.replace("_", "-").split("-") if w]
+    return " ".join(w.capitalize() for w in words)
 
 
 def _detect_value_column(fieldnames: list[str]) -> str:

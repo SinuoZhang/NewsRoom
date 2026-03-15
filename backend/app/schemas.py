@@ -93,6 +93,18 @@ class LlmSelectNewsIn(BaseModel):
     limit: int = 500
 
 
+class LlmSelectIntentIn(BaseModel):
+    instruction: str
+    recent_messages: list[dict[str, str]] = []
+
+
+class LlmSelectIntentOut(BaseModel):
+    operation: str
+    reason: str
+    provider: str
+    model: str
+
+
 class LlmSelectNewsItemOut(BaseModel):
     id: int
     title: str
@@ -224,6 +236,17 @@ class OwidSeriesOut(BaseModel):
     indicator: str
     entity: str | None = None
     source_url: str
+    unit: str | None = None
+    points: list[OwidPointOut]
+    fetched_at: datetime
+
+
+class OwidRandomModuleOut(BaseModel):
+    indicator: str
+    entity: str
+    title: str
+    source_url: str
+    page_url: str
     unit: str | None = None
     points: list[OwidPointOut]
     fetched_at: datetime

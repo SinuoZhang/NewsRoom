@@ -9,49 +9,49 @@ import {
   LlmSelectNewsOut,
   MarketSnapshot,
   News,
-  OwidSeries,
+  OwidRandomModule,
   RegionCounts,
   SeedResult,
   Source,
 } from "./api";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { makeNewsRef } from "./newsRef";
+import createPlotlyComponent from "react-plotly.js/factory";
+import Plotly from "plotly.js-basic-dist-min";
+
+const Plot = createPlotlyComponent(Plotly as never);
 
 type RegionKey = "all" | "north_america" | "europe" | "middle_east" | "greater_china" | "se_asia";
 type Lang = "zh" | "en" | "de";
-type PageTab = "dashboard" | "owid";
+type PageTab = "dashboard" | "owid" | "stats";
+type RegionBucketKey = Exclude<RegionKey, "all"> | "other";
 
-type OwidModuleSpec = {
-  indicator: string;
-  entity: string;
-  title: { zh: string; en: string };
+type RefreshStat = {
+  ts: string;
+  trigger: "manual" | "auto" | "collect";
+  added: number;
+  visible: number;
+  total: number;
+  q: string;
+  source_id: number | null;
+  region: RegionKey;
+  selected_count: number;
+  fetched_count: number | null;
+  inserted_count: number | null;
+  duplicate_count: number | null;
+  source_done: number | null;
+  source_total: number | null;
+  current_source: string | null;
+  added_by_region: Record<RegionBucketKey, number>;
 };
 
-type OwidModuleCard = OwidModuleSpec & {
-  series: OwidSeries;
-};
+type OwidModuleCard = OwidRandomModule;
 
-const OWID_MODULE_POOL: OwidModuleSpec[] = [
-  { indicator: "co2-emissions-per-capita", entity: "Germany", title: { zh: "德国人均二氧化碳排放", en: "Germany CO2 per capita" } },
-  { indicator: "co2-emissions-per-capita", entity: "France", title: { zh: "法国人均二氧化碳排放", en: "France CO2 per capita" } },
-  { indicator: "co2-emissions-per-capita", entity: "United Kingdom", title: { zh: "英国人均二氧化碳排放", en: "UK CO2 per capita" } },
-  { indicator: "gdp-per-capita-worldbank", entity: "Germany", title: { zh: "德国人均GDP", en: "Germany GDP per capita" } },
-  { indicator: "gdp-per-capita-worldbank", entity: "France", title: { zh: "法国人均GDP", en: "France GDP per capita" } },
-  { indicator: "gdp-per-capita-worldbank", entity: "United Kingdom", title: { zh: "英国人均GDP", en: "UK GDP per capita" } },
-  { indicator: "life-expectancy", entity: "Germany", title: { zh: "德国预期寿命", en: "Germany Life expectancy" } },
-  { indicator: "life-expectancy", entity: "France", title: { zh: "法国预期寿命", en: "France Life expectancy" } },
-  { indicator: "life-expectancy", entity: "United Kingdom", title: { zh: "英国预期寿命", en: "UK Life expectancy" } },
-  { indicator: "renewable-share-energy", entity: "Germany", title: { zh: "德国可再生能源占比", en: "Germany Renewable energy share" } },
-  { indicator: "renewable-share-energy", entity: "France", title: { zh: "法国可再生能源占比", en: "France Renewable energy share" } },
-  { indicator: "renewable-share-energy", entity: "United Kingdom", title: { zh: "英国可再生能源占比", en: "UK Renewable energy share" } },
-  { indicator: "share-electricity-renewables", entity: "Germany", title: { zh: "德国可再生电力占比", en: "Germany Renewable electricity share" } },
-  { indicator: "share-electricity-renewables", entity: "France", title: { zh: "法国可再生电力占比", en: "France Renewable electricity share" } },
-  { indicator: "share-electricity-renewables", entity: "United Kingdom", title: { zh: "英国可再生电力占比", en: "UK Renewable electricity share" } },
-  { indicator: "population", entity: "Germany", title: { zh: "德国人口", en: "Germany Population" } },
-  { indicator: "population", entity: "France", title: { zh: "法国人口", en: "France Population" } },
-  { indicator: "population", entity: "United Kingdom", title: { zh: "英国人口", en: "UK Population" } },
-];
+type SelectOp = "replace" | "append" | "remove" | "refine";
+type SelectOpMode = "auto" | SelectOp;
+type MarketRange = "15m" | "1h" | "6h" | "24h" | "all";
+type MarketHistoryPoint = { ts: string; price: number };
+
 
 const formatOptions: Intl.DateTimeFormatOptions = {
   year: "numeric",
@@ -88,27 +88,54 @@ function regionLabel(region: RegionKey, lang: Lang): string {
   return "Southeast Asia";
 }
 
-function pickRandomOwidSpecs(count: number): OwidModuleSpec[] {
-  const pool = [...OWID_MODULE_POOL];
-  for (let i = pool.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [pool[i], pool[j]] = [pool[j], pool[i]];
-  }
-  return pool.slice(0, Math.max(1, Math.min(count, pool.length)));
+function inferRegionFromSourceName(sourceName: string): RegionBucketKey {
+  const text = (sourceName || "").toLowerCase();
+  if (/(nytimes|npr|cnbc|wsj|wall street journal)/.test(text)) return "north_america";
+  if (/(bbc|financial times|guardian|economist|telegraph|independent|reuters|dw|spiegel|tagesschau|france24|rfi)/.test(text)) return "europe";
+  if (/(al jazeera|middle east eye|haaretz)/.test(text)) return "middle_east";
+  if (/(xinhua|people|caixin|36kr|ifeng|bbc chinese|dw chinese|sina|netease|chinanews)/.test(text)) return "greater_china";
+  if (/(straits times|cna singapore|jakarta post|bangkok post)/.test(text)) return "se_asia";
+  return "other";
 }
 
-function buildSparklinePoints(values: number[], width = 250, height = 64): string {
-  if (values.length < 2) return "";
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const span = max - min || 1;
-  return values
-    .map((v, i) => {
-      const x = (i / (values.length - 1)) * width;
-      const y = height - ((v - min) / span) * height;
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(" ");
+function normalizeSelectedIds(ids: number[]): number[] {
+  const out: number[] = [];
+  const seen = new Set<number>();
+  ids.forEach((id) => {
+    if (!Number.isFinite(id) || id <= 0) return;
+    const v = Math.trunc(id);
+    if (!seen.has(v)) {
+      seen.add(v);
+      out.push(v);
+    }
+  });
+  return out;
+}
+
+function inferSelectOp(instruction: string): SelectOp {
+  const text = instruction.trim().toLowerCase();
+  if (!text) return "replace";
+  if (/^(\+|追加|继续勾选|再勾选|add|append|mehr|hinzuf)/i.test(text)) return "append";
+  if (/^(\-|取消勾选|移除|排除|remove|exclude|entfernen|aussch)/i.test(text)) return "remove";
+  if (/^(精简|收窄|只保留|保留|refine|narrow|keep only|verfeinern|eingrenzen)/i.test(text)) return "refine";
+  return "replace";
+}
+
+function mergeSelectedIds(current: number[], incoming: number[], op: SelectOp): number[] {
+  const base = normalizeSelectedIds(current);
+  const next = normalizeSelectedIds(incoming);
+  if (op === "append") {
+    return normalizeSelectedIds([...base, ...next]);
+  }
+  if (op === "remove") {
+    const rm = new Set(next);
+    return base.filter((id) => !rm.has(id));
+  }
+  if (op === "refine") {
+    const keep = new Set(next);
+    return base.filter((id) => keep.has(id));
+  }
+  return next;
 }
 
 export function App() {
@@ -118,10 +145,13 @@ export function App() {
   const [q, setQ] = useState("");
   const [sourceId, setSourceId] = useState<number | "">("");
   const [loading, setLoading] = useState(false);
+  const [checkingUpdates, setCheckingUpdates] = useState(false);
+  const [autoCollecting, setAutoCollecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [seedResult, setSeedResult] = useState<SeedResult | null>(null);
   const [collectResult, setCollectResult] = useState<CollectResult | null>(null);
   const [collectStatus, setCollectStatus] = useState<CollectStatus | null>(null);
+  const [booting, setBooting] = useState(true);
   const [now, setNow] = useState<Date>(new Date());
   const [totalCount, setTotalCount] = useState(0);
   const [selectedRegion, setSelectedRegion] = useState<RegionKey>("all");
@@ -136,14 +166,16 @@ export function App() {
   });
   const [chatMode, setChatMode] = useState<"filtered" | "all" | "selected">("filtered");
   const [useNewsContext, setUseNewsContext] = useState(true);
-  const [chatLimit, setChatLimit] = useState(12);
+  const [chatLimit, setChatLimit] = useState(16);
   const [chatHistory, setChatHistory] = useState<Array<{ role: "user" | "assistant"; text: string }>>([]);
   const [chatLoading, setChatLoading] = useState(false);
+  const [pendingUserPrompt, setPendingUserPrompt] = useState<string | null>(null);
   const [selectingNewsLoading, setSelectingNewsLoading] = useState(false);
   const [refiningLoading, setRefiningLoading] = useState(false);
   const [autoSelectPrompt, setAutoSelectPrompt] = useState("");
   const [chatInputHeight, setChatInputHeight] = useState(180);
   const [selectedNewsIds, setSelectedNewsIds] = useState<number[]>([]);
+  const [selectedHydrated, setSelectedHydrated] = useState(false);
   const [selectedOnlyNews, setSelectedOnlyNews] = useState<News[]>([]);
   const [selectedNewsMeta, setSelectedNewsMeta] = useState<Record<number, { title: string; source: string; url: string; published_at?: string | null }>>({});
   const [showSelectedList, setShowSelectedList] = useState(false);
@@ -151,6 +183,11 @@ export function App() {
   const [llmModels, setLlmModels] = useState<LlmModelsOut | null>(null);
   const [llmModelDraft, setLlmModelDraft] = useState("");
   const [market, setMarket] = useState<MarketSnapshot | null>(null);
+  const [marketChecking, setMarketChecking] = useState(false);
+  const [marketRefreshNotice, setMarketRefreshNotice] = useState<string | null>(null);
+  const [marketHistory, setMarketHistory] = useState<Record<string, MarketHistoryPoint[]>>({});
+  const [marketModalKey, setMarketModalKey] = useState<string | null>(null);
+  const [marketRange, setMarketRange] = useState<MarketRange>("1h");
   const [metalUnitMode, setMetalUnitMode] = useState<"usd_imperial" | "eur_metric">("usd_imperial");
   const [translateInput, setTranslateInput] = useState("");
   const [translateTarget, setTranslateTarget] = useState<"zh" | "en" | "de">("en");
@@ -165,6 +202,9 @@ export function App() {
   const [owidCards, setOwidCards] = useState<OwidModuleCard[]>([]);
   const [owidLoading, setOwidLoading] = useState(false);
   const [owidError, setOwidError] = useState<string | null>(null);
+  const [owidTitleTranslations, setOwidTitleTranslations] = useState<Record<string, string>>({});
+  const [newsRefreshNotice, setNewsRefreshNotice] = useState<string | null>(null);
+  const [refreshStats, setRefreshStats] = useState<RefreshStat[]>([]);
   const lastCollectRunningRef = useRef(false);
   const chatLoadingRef = useRef(false);
   const llmPanelRef = useRef<HTMLElement | null>(null);
@@ -172,7 +212,7 @@ export function App() {
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
   const newsColumnRef = useRef<HTMLDivElement | null>(null);
   const [isPageAtTop, setIsPageAtTop] = useState(true);
-  const showStartupOverlay = !seedResult || !collectStatus || collectStatus.running;
+  const showStartupOverlay = booting;
 
   const sourceMap = useMemo(() => {
     const m = new Map<number, string>();
@@ -249,6 +289,31 @@ export function App() {
     if (saved === "zh" || saved === "en" || saved === "de") {
       setLang(saved);
     }
+    try {
+      const raw = window.localStorage.getItem("selected_news_ids");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          setSelectedNewsIds(normalizeSelectedIds(parsed.map((x) => Number(x))));
+        }
+      }
+    } catch {
+      // ignore local parse issues
+    } finally {
+      setSelectedHydrated(true);
+    }
+
+    try {
+      const rawStats = window.localStorage.getItem("news_refresh_stats");
+      if (rawStats) {
+        const parsed = JSON.parse(rawStats);
+        if (Array.isArray(parsed)) {
+          setRefreshStats(parsed.slice(0, 500));
+        }
+      }
+    } catch {
+      // ignore local parse issues
+    }
   }, []);
 
   useEffect(() => {
@@ -256,24 +321,67 @@ export function App() {
   }, [lang]);
 
   useEffect(() => {
+    if (!selectedHydrated) return;
+    window.localStorage.setItem("selected_news_ids", JSON.stringify(normalizeSelectedIds(selectedNewsIds)));
+  }, [selectedNewsIds, selectedHydrated]);
+
+  useEffect(() => {
+    window.localStorage.setItem("news_refresh_stats", JSON.stringify(refreshStats.slice(0, 500)));
+  }, [refreshStats]);
+
+  useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 60000);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (!newsRefreshNotice) return;
+    const timer = window.setTimeout(() => setNewsRefreshNotice(null), 2400);
+    return () => window.clearTimeout(timer);
+  }, [newsRefreshNotice]);
+
+  useEffect(() => {
+    if (!marketRefreshNotice) return;
+    const timer = window.setTimeout(() => setMarketRefreshNotice(null), 2200);
+    return () => window.clearTimeout(timer);
+  }, [marketRefreshNotice]);
 
   useEffect(() => {
     chatLoadingRef.current = chatLoading;
   }, [chatLoading]);
 
   useEffect(() => {
-    const timer = window.setInterval(() => {
-      if (document.hidden || chatLoadingRef.current) {
-        return;
-      }
-      void refreshCollectStatus();
-    }, 12000);
     void refreshCollectStatus();
-    return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (lang === "en") return;
+    if (owidCards.length === 0) return;
+
+    const target = lang === "zh" ? "zh" : "de";
+    const missing = owidCards.filter((card) => !owidTitleTranslations[`${target}|${card.indicator}|${card.entity}`]);
+    if (missing.length === 0) return;
+
+    let cancelled = false;
+    void (async () => {
+      for (const card of missing) {
+        if (cancelled) return;
+        const key = `${target}|${card.indicator}|${card.entity}`;
+        try {
+          const res = await api.translateText({ text: card.title, source_lang: "en", target_lang: target });
+          if (cancelled) return;
+          setOwidTitleTranslations((prev) => ({ ...prev, [key]: res.translated_text || card.title }));
+        } catch {
+          if (cancelled) return;
+          setOwidTitleTranslations((prev) => ({ ...prev, [key]: card.title }));
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [lang, owidCards, owidTitleTranslations]);
 
   useEffect(() => {
     void loadLlmModels();
@@ -290,6 +398,13 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    const timer = window.setInterval(() => {
+      void runAutoCollectTick();
+    }, 60000);
+    return () => window.clearInterval(timer);
+  }, [booting, autoCollecting, q, sourceId, selectedRegion, news.length]);
+
+  useEffect(() => {
     if (sources.length === 0) return;
     void onSearch();
   }, [selectedRegion]);
@@ -302,8 +417,11 @@ export function App() {
       setSeedResult(seed);
       setSources(srcs);
       await refreshNewsView();
+      await refreshCollectStatus();
     } catch (e) {
       setError((e as Error).message);
+    } finally {
+      setBooting(false);
     }
   }
 
@@ -328,8 +446,7 @@ export function App() {
     const region = selectedRegion === "all" ? undefined : selectedRegion;
     const maxId = news.length > 0 ? Math.max(...news.map((n) => n.id)) : undefined;
     if (!maxId) {
-      await refreshNewsView();
-      return;
+      return { added: 0, byRegion: { north_america: 0, europe: 0, middle_east: 0, greater_china: 0, se_asia: 0, other: 0 } as Record<RegionBucketKey, number> };
     }
 
     const rows = await api.getNews({
@@ -341,19 +458,93 @@ export function App() {
     });
 
     if (!rows.length) {
-      return;
+      return { added: 0, byRegion: { north_america: 0, europe: 0, middle_east: 0, greater_china: 0, se_asia: 0, other: 0 } as Record<RegionBucketKey, number> };
     }
 
+    let added = 0;
+    let addedRows: News[] = [];
     setNews((prev) => {
-      const merged = [...rows, ...prev];
+      const seen = new Set(prev.map((x) => x.id));
+      const uniqueNew = rows.filter((x) => !seen.has(x.id));
+      added = uniqueNew.length;
+      addedRows = uniqueNew;
+      const merged = [...uniqueNew, ...prev];
       return merged.slice(0, 260);
     });
-    setTotalCount((prev) => prev + rows.length);
+    if (added > 0) {
+      setTotalCount((prev) => prev + added);
+    }
     try {
       const mapCounts = await api.getRegionCounts();
       setRegionCounts(mapCounts);
     } catch {
       // ignore
+    }
+    const byRegion = { north_america: 0, europe: 0, middle_east: 0, greater_china: 0, se_asia: 0, other: 0 } as Record<RegionBucketKey, number>;
+    addedRows.forEach((row) => {
+      byRegion[inferRegionFromSourceName(row.source_name)] += 1;
+    });
+    return { added, byRegion };
+  }
+
+  function recordRefreshStat(trigger: RefreshStat["trigger"], added: number, byRegion?: Record<RegionBucketKey, number>) {
+    const row: RefreshStat = {
+      ts: new Date().toISOString(),
+      trigger,
+      added: Math.max(0, added),
+      visible: Math.max(0, news.length + Math.max(0, added)),
+      total: Math.max(0, totalCount + Math.max(0, added)),
+      q,
+      source_id: sourceId === "" ? null : sourceId,
+      region: selectedRegion,
+      selected_count: selectedNewsIds.length,
+      fetched_count: collectResult?.fetched_count ?? null,
+      inserted_count: collectResult?.inserted_count ?? null,
+      duplicate_count: collectResult?.duplicate_count ?? null,
+      source_done: collectStatus?.source_done ?? null,
+      source_total: collectStatus?.source_total ?? null,
+      current_source: collectStatus?.current_source ?? null,
+      added_by_region: byRegion || { north_america: 0, europe: 0, middle_east: 0, greater_china: 0, se_asia: 0, other: 0 },
+    };
+    setRefreshStats((prev) => [row, ...prev].slice(0, 500));
+  }
+
+  async function checkNewsUpdatesNow(showNoNewNotice = true, trigger: RefreshStat["trigger"] = "manual") {
+    if (checkingUpdates || loading || chatLoading || selectingNewsLoading || refiningLoading) return;
+    setCheckingUpdates(true);
+    try {
+      const result = await refreshNewsIncremental();
+      const added = result.added;
+      recordRefreshStat(trigger, added, result.byRegion);
+      if (added > 0) {
+        setNewsRefreshNotice(tr(`已更新 ${added} 条新内容`, `${added} new items added`, `${added} neue Eintraege hinzugefuegt`));
+      } else if (showNoNewNotice) {
+        setNewsRefreshNotice(tr("暂无新内容", "No new items", "Keine neuen Eintraege"));
+      }
+    } catch {
+      // keep quiet for manual lightweight refresh
+    } finally {
+      setCheckingUpdates(false);
+    }
+  }
+
+  async function runAutoCollectTick() {
+    if (document.hidden) return;
+    if (booting || autoCollecting || loading) return;
+    setAutoCollecting(true);
+    try {
+      const collect = await api.collectNews();
+      setCollectResult(collect);
+      const result = await refreshNewsIncremental();
+      const added = result.added;
+      recordRefreshStat("collect", added, result.byRegion);
+      if (added > 0) {
+        setNewsRefreshNotice(tr(`自动抓取新增 ${added} 条`, `Auto-collect added ${added} new items`, `Auto-Erfassung: ${added} neue Eintraege`));
+      }
+    } catch {
+      // keep quiet for background auto-collect failures
+    } finally {
+      setAutoCollecting(false);
     }
   }
 
@@ -376,7 +567,14 @@ export function App() {
         setCollectResult(status.last_result);
       }
       if (lastCollectRunningRef.current && !status.running) {
-        await refreshNewsIncremental();
+        const result = await refreshNewsIncremental();
+        const added = result.added;
+        recordRefreshStat("collect", added, result.byRegion);
+        setNewsRefreshNotice(
+          added > 0
+            ? tr(`抓取完成，新增 ${added} 条`, `Collection finished: ${added} new items`, `Erfassung fertig: ${added} neue Eintraege`)
+            : tr("抓取完成，无新增内容", "Collection finished: no new items", "Erfassung fertig: keine neuen Eintraege")
+        );
       }
       lastCollectRunningRef.current = status.running;
     } catch {
@@ -415,12 +613,51 @@ export function App() {
     }
   }
 
-  async function refreshMarketPanel() {
+  async function refreshMarketPanel(showNotice = false) {
+    if (showNotice) setMarketChecking(true);
     try {
-      const snapshot = await api.getMarketSnapshot();
+      const snapshot = await api.getMarketSnapshot(showNotice);
+      let changed = false;
+      if (!market || market.items.length !== snapshot.items.length) {
+        changed = true;
+      } else {
+        const prevByKey = new Map(market.items.map((x) => [x.key, x]));
+        for (const item of snapshot.items) {
+          const prev = prevByKey.get(item.key);
+          if (!prev || prev.price !== item.price || prev.change_pct !== item.change_pct || prev.updated_at !== item.updated_at) {
+            changed = true;
+            break;
+          }
+        }
+      }
       setMarket(snapshot);
+      const observedAt = new Date().toISOString();
+      setMarketHistory((prev) => {
+        const next: Record<string, MarketHistoryPoint[]> = { ...prev };
+        snapshot.items.forEach((item) => {
+          if (item.price === null || Number.isNaN(item.price)) return;
+          const current = next[item.key] ? [...next[item.key]] : [];
+          const last = current[current.length - 1];
+          if (!last || last.price !== item.price) {
+            current.push({ ts: observedAt, price: item.price });
+          } else {
+            current[current.length - 1] = { ts: observedAt, price: item.price };
+          }
+          next[item.key] = current.slice(-720);
+        });
+        return next;
+      });
+      if (showNotice) {
+        setMarketRefreshNotice(
+          changed
+            ? tr("行情已更新", "Quotes updated", "Kurse aktualisiert")
+            : tr("行情无变化", "No quote changes", "Keine Kursaenderung")
+        );
+      }
     } catch {
       // ignore transient market fetch failures
+    } finally {
+      if (showNotice) setMarketChecking(false);
     }
   }
 
@@ -428,11 +665,7 @@ export function App() {
     setOwidLoading(true);
     try {
       setOwidError(null);
-      const picked = pickRandomOwidSpecs(8);
-      const seriesList = await Promise.all(
-        picked.map((spec) => api.getOwidSeries({ indicator: spec.indicator, entity: spec.entity, limit: 40 }))
-      );
-      const cards: OwidModuleCard[] = picked.map((spec, idx) => ({ ...spec, series: seriesList[idx] }));
+      const cards = await api.getOwidRandomModules(10, 40);
       setOwidCards(cards);
     } catch (e) {
       setOwidError((e as Error).message);
@@ -499,7 +732,16 @@ export function App() {
   }
 
   async function onChat() {
-    if (chatLoading) return;
+    if (chatLoading || selectingNewsLoading || refiningLoading) {
+      setChatHistory((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          text: tr("正在处理中，请稍候再发送。", "A request is already running. Please wait.", "Eine Anfrage laeuft bereits. Bitte kurz warten.")
+        }
+      ]);
+      return;
+    }
     const raw = chatInputRef.current?.value || "";
     const prompt = raw.trim();
     if (!prompt) return;
@@ -512,34 +754,85 @@ export function App() {
 
     if (inlineSelectInstruction) {
       setChatHistory((prev) => [...prev, { role: "user", text: prompt }]);
-      await onLlmAutoSelectNews(inlineSelectInstruction, true);
+      setChatHistory((prev) => [
+        ...prev,
+        { role: "assistant", text: tr("正在按指令筛选并勾选新闻...", "Selecting and checking news by instruction...", "Nachrichten werden nach Anweisung gefiltert und markiert...") }
+      ]);
+      await onLlmAutoSelectNews(inlineSelectInstruction, false);
       return;
     }
 
     setChatLoading(true);
+    setSelectingNewsLoading(false);
+    setPendingUserPrompt(prompt);
     setChatHistory((prev) => [...prev, { role: "user", text: prompt }]);
     try {
       const region = chatMode === "all" || selectedRegion === "all" ? undefined : selectedRegion;
       const chatSourceId = chatMode === "all" ? undefined : (sourceId === "" ? undefined : sourceId);
-      const payload = {
+      let finalSelectedIds = [...selectedNewsIds];
+
+      if (useNewsContext) {
+        setSelectingNewsLoading(true);
+        const selectResult: LlmSelectNewsOut = await api.llmSelectNews({
+          instruction: prompt,
+          mode: chatMode,
+          q: chatMode === "filtered" ? (q || undefined) : undefined,
+          source_id: chatSourceId,
+          region,
+          news_ids: selectedNewsIds,
+          limit: chatMode === "all" ? 500 : 300
+        });
+
+        finalSelectedIds = normalizeSelectedIds(selectResult.selected_ids).slice(0, Math.max(1, chatLimit));
+        setSelectedNewsIds(finalSelectedIds);
+        if (selectResult.selected_items.length > 0) {
+          setSelectedNewsMeta((prev) => {
+            const next = { ...prev };
+            selectResult.selected_items.forEach((item) => {
+              next[item.id] = { title: item.title, source: item.source, url: item.url, published_at: item.published_at };
+            });
+            return next;
+          });
+        }
+        setShowSelectedList(true);
+        setShowSelectedOnly(false);
+        setSelectingNewsLoading(false);
+
+        if (finalSelectedIds.length === 0) {
+          setChatHistory((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              text: t(
+                `未从当前范围中筛选到匹配新闻（扫描 ${selectResult.scanned_news_count} 条）。请尝试放宽范围或调整问题关键词。`,
+                `No matching news selected in current scope (scanned ${selectResult.scanned_news_count}). Try broader scope or adjust keywords.`
+              )
+            }
+          ]);
+          return;
+        }
+      }
+
+      const result: LlmChatOut = await api.llmChat({
         message: prompt,
-        mode: chatMode,
+        mode: useNewsContext ? "selected" : chatMode,
         use_news_context: useNewsContext,
         ui_lang: lang,
         use_chat_history: true,
         history_turns: 12,
-        q: chatMode === "filtered" ? (q || undefined) : undefined,
-        source_id: chatSourceId,
-        region,
-        news_ids: selectedNewsIds,
+        q: useNewsContext ? undefined : (chatMode === "filtered" ? (q || undefined) : undefined),
+        source_id: useNewsContext ? undefined : chatSourceId,
+        region: useNewsContext ? undefined : region,
+        news_ids: useNewsContext ? finalSelectedIds : selectedNewsIds,
         limit: chatLimit
-      };
-
-      const result: LlmChatOut = await api.llmChat(payload);
+      });
 
       setChatHistory((prev) => [
         ...prev,
-        { role: "assistant", text: `${result.answer}\n\n[provider=${result.provider}, model=${result.model}, news=${result.used_news_count}]` }
+        {
+          role: "assistant",
+          text: `${result.answer}\n\n${useNewsContext ? t(`本次分析新闻ID: ${formatNewsIdList(finalSelectedIds)}`, `News IDs used: ${formatNewsIdList(finalSelectedIds)}`) : t("本次分析未使用新闻上下文", "No news context used for this answer")}\n[provider=${result.provider}, model=${result.model}, news=${result.used_news_count}]`
+        }
       ]);
     } catch (e) {
       const msg = (e as Error).message || "unknown";
@@ -548,6 +841,8 @@ export function App() {
         { role: "assistant", text: `请求失败: ${msg}\n建议先切到“快速(8条)”或减少勾选新闻数量后重试。` }
       ]);
     } finally {
+      setSelectingNewsLoading(false);
+      setPendingUserPrompt(null);
       setChatLoading(false);
     }
   }
@@ -556,11 +851,15 @@ export function App() {
     const text = prompt.trim();
     if (!text) return null;
 
-    const slash = text.match(/^\/(select|autoselect|勾选)\s+(.+)$/i);
+    const slash = text.match(/^\/(select|autoselect|selectall|勾选)\s+(.+)$/i);
     if (slash?.[2]) return slash[2].trim();
 
     const prefixed = text.match(/^(勾选|请勾选|帮我勾选|筛选并勾选|select|auto\s*select)\s*[：:]?\s*(.+)$/i);
     if (prefixed?.[2]) return prefixed[2].trim();
+
+    if (/(勾选|筛选并勾选|取消勾选|精简|只保留|auto\s*select|select|append|remove|refine)/i.test(text)) {
+      return text;
+    }
 
     return null;
   }
@@ -576,9 +875,11 @@ export function App() {
     setSelectingNewsLoading(true);
     try {
       setError(null);
+      const op = inferSelectOp(instruction);
+      const currentSelected = [...selectedNewsIds];
       const region = forceGlobalScope ? undefined : (chatMode === "all" || selectedRegion === "all" ? undefined : selectedRegion);
       const chatSourceId = forceGlobalScope ? undefined : (chatMode === "all" ? undefined : (sourceId === "" ? undefined : sourceId));
-      const selectMode = forceGlobalScope ? "all" : chatMode;
+      const selectMode = forceGlobalScope ? "all" : (op === "append" && chatMode === "selected" ? "filtered" : chatMode);
       const result: LlmSelectNewsOut = await api.llmSelectNews({
         instruction,
         mode: selectMode,
@@ -589,8 +890,9 @@ export function App() {
         limit: forceGlobalScope ? 0 : 500
       });
 
-      setSelectedNewsIds(result.selected_ids);
-      if (result.selected_ids.length > 0) {
+      const mergedSelected = mergeSelectedIds(currentSelected, result.selected_ids, op);
+      setSelectedNewsIds(mergedSelected);
+      if (mergedSelected.length > 0) {
         setChatMode("selected");
       }
       if (result.selected_items.length > 0) {
@@ -609,8 +911,8 @@ export function App() {
         {
           role: "assistant",
           text: t(
-            `已根据要求自动勾选 ${result.selected_ids.length} 条新闻（扫描 ${result.scanned_news_count} 条）。\n[provider=${result.provider}, model=${result.model}]\n${result.reason || ""}`,
-            `Auto-selected ${result.selected_ids.length} news items (scanned ${result.scanned_news_count}).\n[provider=${result.provider}, model=${result.model}]\n${result.reason || ""}`
+            `已完成勾选更新（模式: ${op}）：候选 ${result.selected_ids.length} 条，当前选集 ${mergedSelected.length} 条（扫描 ${result.scanned_news_count} 条）。\n[provider=${result.provider}, model=${result.model}]\n${result.reason || ""}`,
+            `Selection updated (mode: ${op}): candidate ${result.selected_ids.length}, current set ${mergedSelected.length} (scanned ${result.scanned_news_count}).\n[provider=${result.provider}, model=${result.model}]\n${result.reason || ""}`
           )
         }
       ]);
@@ -674,7 +976,7 @@ export function App() {
         limit: chatLimit
       });
 
-      setSelectedNewsIds(result.selected_ids);
+      setSelectedNewsIds(normalizeSelectedIds(result.selected_ids));
       if (result.selected_items.length > 0) {
         setSelectedNewsMeta((prev) => {
           const next = { ...prev };
@@ -706,8 +1008,8 @@ export function App() {
         {
           role: "assistant",
           text: t(
-            `已执行补充检索并重分析：新增 ${result.added_ids.length} 条，当前勾选 ${result.selected_ids.length} 条。\n补充关键词：${result.keywords.join(" / ") || "-"}\n${result.missing_points.length ? `待补充信息：${result.missing_points.join("；")}` : ""}\n\n${result.answer}\n\n[provider=${result.provider}, model=${result.model}, news=${result.used_news_count}]`,
-            `Refinement rerun complete: added ${result.added_ids.length}, selected ${result.selected_ids.length}.\nKeywords: ${result.keywords.join(" / ") || "-"}\n${result.missing_points.length ? `Missing points: ${result.missing_points.join("; ")}` : ""}\n\n${result.answer}\n\n[provider=${result.provider}, model=${result.model}, news=${result.used_news_count}]`
+            `已执行补充检索并重分析：新增 ${result.added_ids.length} 条，当前勾选 ${result.selected_ids.length} 条。\n补充关键词：${result.keywords.join(" / ") || "-"}\n${result.missing_points.length ? `待补充信息：${result.missing_points.join("；")}` : ""}\n\n${result.answer}\n\n本次分析新闻ID: ${formatNewsIdList(result.selected_ids.slice(0, chatLimit))}\n[provider=${result.provider}, model=${result.model}, news=${result.used_news_count}]`,
+            `Refinement rerun complete: added ${result.added_ids.length}, selected ${result.selected_ids.length}.\nKeywords: ${result.keywords.join(" / ") || "-"}\n${result.missing_points.length ? `Missing points: ${result.missing_points.join("; ")}` : ""}\n\n${result.answer}\n\nNews IDs used: ${formatNewsIdList(result.selected_ids.slice(0, chatLimit))}\n[provider=${result.provider}, model=${result.model}, news=${result.used_news_count}]`
           )
         }
       ]);
@@ -720,6 +1022,13 @@ export function App() {
 
   const toggleSelectNews = useCallback((newsId: number) => {
     setSelectedNewsIds((prev) => (prev.includes(newsId) ? prev.filter((x) => x !== newsId) : [...prev, newsId]));
+  }, []);
+
+  const clearSelectedNews = useCallback(() => {
+    setSelectedNewsIds([]);
+    setShowSelectedOnly(false);
+    setShowSelectedList(false);
+    setSelectedOnlyNews([]);
   }, []);
 
   function onChatInputKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
@@ -783,6 +1092,34 @@ export function App() {
     return new Intl.DateTimeFormat(undefined, { ...formatOptions, timeZone: sourceTimezone || "UTC" }).format(dt);
   }
 
+  function formatDataTimestamp(value: string | null) {
+    const dt = toUtcDate(value);
+    if (!dt) return "-";
+    return new Intl.DateTimeFormat(undefined, {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    }).format(dt);
+  }
+
+  function filterMarketSeriesByRange(points: MarketHistoryPoint[], range: MarketRange): MarketHistoryPoint[] {
+    if (range === "all") return points;
+    const nowMs = Date.now();
+    const backMs =
+      range === "15m" ? 15 * 60 * 1000 :
+      range === "1h" ? 60 * 60 * 1000 :
+      range === "6h" ? 6 * 60 * 60 * 1000 :
+      24 * 60 * 60 * 1000;
+    return points.filter((p) => {
+      const ts = Date.parse(p.ts);
+      return Number.isFinite(ts) && ts >= nowMs - backMs;
+    });
+  }
+
   function scrollChatToLatest() {
     const box = chatBoxRef.current;
     if (!box) return;
@@ -792,8 +1129,9 @@ export function App() {
   useEffect(() => {
     const box = chatBoxRef.current;
     if (!box) return;
+    if (!isChatAtBottom) return;
     box.scrollTo({ top: box.scrollHeight, behavior: "auto" });
-  }, [chatHistory.length]);
+  }, [chatHistory.length, isChatAtBottom]);
 
   useEffect(() => {
     if (!chatLoading) return;
@@ -803,6 +1141,7 @@ export function App() {
   }, [chatLoading]);
 
   useEffect(() => {
+    if (activeTab !== "dashboard") return;
     const box = chatBoxRef.current;
     if (!box) return;
     const onScroll = () => {
@@ -812,7 +1151,7 @@ export function App() {
     onScroll();
     box.addEventListener("scroll", onScroll, { passive: true });
     return () => box.removeEventListener("scroll", onScroll);
-  }, []);
+  }, [activeTab]);
 
   useEffect(() => {
     const onScroll = () => {
@@ -832,6 +1171,11 @@ export function App() {
     if (value === null || Number.isNaN(value)) return "-";
     const sign = value > 0 ? "+" : "";
     return `${sign}${value.toFixed(2)}%`;
+  }
+
+  function formatNewsIdList(ids: number[]) {
+    if (!ids.length) return "-";
+    return ids.join(", ");
   }
 
   function getEurUsdRate(): number | null {
@@ -871,6 +1215,7 @@ export function App() {
     collectStatus && collectStatus.source_total > 0
       ? Math.min(100, Math.round((collectStatus.source_done / collectStatus.source_total) * 100))
       : 0;
+  const newsMapBusy = Boolean(collectStatus?.running) || checkingUpdates || loading;
 
   const t = (zh: string, en: string) => (lang === "zh" ? zh : en);
   const tr = (zh: string, en: string, de: string) => (lang === "zh" ? zh : lang === "de" ? de : en);
@@ -888,11 +1233,6 @@ export function App() {
           <div className="meta">
             <span>{sourceMap.get(item.source_id) || item.source_name}</span>
             <span className="meta-nowrap">{t("发布时间(本地)", "Published (Local)")} {formatTime(item.published_at)}</span>
-          </div>
-          <div className="meta">
-            <span className="meta-nowrap">
-              {t("新闻编号", "News Ref")} {makeNewsRef({ sourceName: item.source_name, title: item.title, publishedAt: item.published_at, collectedAt: item.collected_at, fallbackId: item.id })}
-            </span>
           </div>
           <div className="meta">
             <label className="meta-nowrap">
@@ -919,27 +1259,63 @@ export function App() {
   const owidModules = useMemo(
     () =>
       owidCards.map((card, idx) => {
-        const pts = card.series.points || [];
+        const pts = card.points || [];
         const last = pts.length > 0 ? pts[pts.length - 1] : null;
         const prev = pts.length > 1 ? pts[pts.length - 2] : null;
         const first = pts.length > 0 ? pts[0] : null;
         const delta = last && prev ? last.value - prev.value : null;
-        const recentValues = pts.slice(-18).map((x) => x.value);
-        const sparkline = buildSparklinePoints(recentValues);
+        const recentPoints = pts.slice(-18);
+        const recentValues = recentPoints.map((x) => x.value);
+        const firstRecent = recentPoints[0] || null;
+        const lastRecent = recentPoints[recentPoints.length - 1] || null;
+        const owidPageUrl = card.page_url;
+        const titleKey = `${lang === "zh" ? "zh" : "de"}|${card.indicator}|${card.entity}`;
+        const localizedTitle = lang === "en" ? card.title : (owidTitleTranslations[titleKey] || card.title);
         return (
           <article key={`owid-${card.indicator}-${card.entity}-${idx}`} className="owid-card">
             <div className="owid-card-top">
-              <h4>{lang === "zh" ? card.title.zh : card.title.en}</h4>
+              <h4>{localizedTitle}</h4>
               <span className="owid-chip">{card.entity}</span>
             </div>
             <div className="owid-main-value">
               {last ? last.value.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "-"}
             </div>
             <div className="owid-chart-wrap">
-              {sparkline ? (
-                <svg viewBox="0 0 250 64" className="owid-sparkline" role="img" aria-label="OWID trend">
-                  <polyline points={sparkline} fill="none" />
-                </svg>
+              {recentPoints.length >= 2 ? (
+                <Plot
+                  data={[
+                    {
+                      x: recentPoints.map((p) => p.year),
+                      y: recentValues,
+                      type: "scatter",
+                      mode: "lines+markers",
+                      line: { color: "#2f7f6f", width: 2.4 },
+                      marker: { color: "#2f7f6f", size: 4 },
+                      hovertemplate: "%{x}: %{y}<extra></extra>",
+                    },
+                  ]}
+                  layout={{
+                    autosize: true,
+                    height: 170,
+                    margin: { l: 48, r: 12, t: 8, b: 36 },
+                    paper_bgcolor: "rgba(0,0,0,0)",
+                    plot_bgcolor: "rgba(255,255,255,0.55)",
+                    xaxis: {
+                      title: { text: tr("年份", "Year", "Jahr"), standoff: 4 },
+                      tickfont: { size: 10 },
+                      gridcolor: "rgba(116,136,160,0.18)",
+                    },
+                    yaxis: {
+                      title: { text: card.unit || tr("数值", "Value", "Wert"), standoff: 4 },
+                      tickfont: { size: 10 },
+                      gridcolor: "rgba(116,136,160,0.18)",
+                    },
+                    showlegend: false,
+                  }}
+                  config={{ displayModeBar: false, responsive: true, staticPlot: false }}
+                  style={{ width: "100%", height: "170px" }}
+                  useResizeHandler
+                />
               ) : (
                 <div className="owid-empty-chart">{tr("数据不足，无法绘图", "Not enough points for chart", "Zu wenige Daten fuer Diagramm")}</div>
               )}
@@ -952,17 +1328,100 @@ export function App() {
             </div>
             <div className="owid-meta-row">
               <span>{tr("起始年份", "Start year", "Startjahr")}: {first?.year ?? "-"}</span>
-              <span>{tr("样本点", "Points", "Datenpunkte")}: {pts.length}</span>
+              <span>{tr("样本点", "Points", "Datenpunkte")}: {pts.length}{firstRecent && lastRecent ? ` (${firstRecent.year}-${lastRecent.year})` : ""}</span>
             </div>
             <div className="owid-meta-row">
-              <span>{t("单位", "Unit")}: {card.series.unit || "-"}</span>
-              <a href={card.series.source_url} target="_blank" rel="noreferrer">OWID</a>
+              <span>{t("单位", "Unit")}: {card.unit || "-"}</span>
+              <span className="owid-links-inline">
+                <a href={owidPageUrl} target="_blank" rel="noreferrer">{tr("图表页面", "Chart page", "Diagrammseite")}</a>
+                <a href={card.source_url} target="_blank" rel="noreferrer">{tr("数据链接", "Data link", "Datenlink")}</a>
+              </span>
             </div>
           </article>
         );
       }),
     [owidCards, lang]
   );
+
+  const refreshStatsSummary = useMemo(() => {
+    const totalChecks = refreshStats.length;
+    const totalAdded = refreshStats.reduce((acc, x) => acc + x.added, 0);
+    const withNew = refreshStats.filter((x) => x.added > 0).length;
+    const avgPerCheck = totalChecks > 0 ? totalAdded / totalChecks : 0;
+    const avgPerMinute = totalChecks > 0
+      ? (() => {
+          const first = Date.parse(refreshStats[totalChecks - 1].ts);
+          const last = Date.parse(refreshStats[0].ts);
+          const mins = Math.max(1, (last - first) / 60000);
+          return totalAdded / mins;
+        })()
+      : 0;
+    const maxAdded = refreshStats.reduce((acc, x) => Math.max(acc, x.added), 0);
+    const triggerCount = {
+      manual: refreshStats.filter((x) => x.trigger === "manual").length,
+      auto: refreshStats.filter((x) => x.trigger === "auto").length,
+      collect: refreshStats.filter((x) => x.trigger === "collect").length,
+    };
+    return { totalChecks, totalAdded, withNew, avgPerCheck, avgPerMinute, maxAdded, triggerCount };
+  }, [refreshStats]);
+
+  const refreshTrend = useMemo(() => {
+    const points = [...refreshStats].slice(0, 80).reverse();
+    return {
+      x: points.map((p) => formatTime(p.ts)),
+      y: points.map((p) => p.added),
+    };
+  }, [refreshStats]);
+
+  const regionDistribution = useMemo(
+    () => [
+      { key: "north_america", label: tr("北美", "North America", "Nordamerika"), value: regionCounts.north_america },
+      { key: "europe", label: tr("欧洲", "Europe", "Europa"), value: regionCounts.europe },
+      { key: "middle_east", label: tr("中东", "Middle East", "Naher Osten"), value: regionCounts.middle_east },
+      { key: "greater_china", label: tr("大中华", "Greater China", "Grosschina"), value: regionCounts.greater_china },
+      { key: "se_asia", label: tr("东南亚", "Southeast Asia", "Suedostasien"), value: regionCounts.se_asia },
+      { key: "other", label: tr("其他", "Other", "Sonstige"), value: regionCounts.other },
+    ],
+    [regionCounts, lang]
+  );
+
+  const addedByRegionStats = useMemo(() => {
+    const totals = {
+      north_america: 0,
+      europe: 0,
+      middle_east: 0,
+      greater_china: 0,
+      se_asia: 0,
+      other: 0,
+    };
+    refreshStats.forEach((r) => {
+      totals.north_america += r.added_by_region?.north_america || 0;
+      totals.europe += r.added_by_region?.europe || 0;
+      totals.middle_east += r.added_by_region?.middle_east || 0;
+      totals.greater_china += r.added_by_region?.greater_china || 0;
+      totals.se_asia += r.added_by_region?.se_asia || 0;
+      totals.other += r.added_by_region?.other || 0;
+    });
+    return [
+      { label: tr("北美", "North America", "Nordamerika"), value: totals.north_america },
+      { label: tr("欧洲", "Europe", "Europa"), value: totals.europe },
+      { label: tr("中东", "Middle East", "Naher Osten"), value: totals.middle_east },
+      { label: tr("大中华", "Greater China", "Grosschina"), value: totals.greater_china },
+      { label: tr("东南亚", "Southeast Asia", "Suedostasien"), value: totals.se_asia },
+      { label: tr("其他", "Other", "Sonstige"), value: totals.other },
+    ];
+  }, [refreshStats, lang]);
+
+  const activeMarketItem = useMemo(() => {
+    if (!marketModalKey || !market) return null;
+    return market.items.find((x) => x.key === marketModalKey) || null;
+  }, [market, marketModalKey]);
+
+  const activeMarketSeries = useMemo(() => {
+    if (!activeMarketItem) return [];
+    const points = marketHistory[activeMarketItem.key] || [];
+    return filterMarketSeriesByRange(points, marketRange);
+  }, [activeMarketItem, marketHistory, marketRange]);
 
   return (
     <div className="page">
@@ -1027,23 +1486,35 @@ export function App() {
             >
               {metalUnitMode === "usd_imperial" ? t("切换: 欧元公制", "Switch: EUR Metric") : t("切换: 美元英制", "Switch: USD Imperial")}
             </button>
-            <button onClick={() => void refreshMarketPanel()} disabled={loading || chatLoading}>{t("刷新行情", "Refresh Quotes")}</button>
+            <button onClick={() => void refreshMarketPanel(true)} disabled={loading || chatLoading || marketChecking}>
+              {marketChecking ? tr("检查更新中...", "Checking updates...", "Pruefe Updates...") : t("刷新行情", "Refresh Quotes")}
+            </button>
           </div>
         </div>
+        {marketRefreshNotice && <div className="market-refresh-notice">{marketRefreshNotice}</div>}
         <div className="market-row">
           {(market?.items || []).map((item) => (
             <div key={item.key} className="market-card">
               <div className="market-main-line">
                 <span className="market-title-inline">{item.label}:</span>
-                <span className="market-price-inline">{displayMarketPrice(item).value}</span>
+                <button
+                  type="button"
+                  className="market-price-trigger"
+                  onClick={() => {
+                    setMarketModalKey(item.key);
+                    setMarketRange("1h");
+                  }}
+                >
+                  <span className="market-price-inline">{displayMarketPrice(item).value}</span>
+                </button>
                 <span className="market-unit-inline">{displayMarketPrice(item).unit}</span>
               </div>
               <div className="market-sub-line">
-                {tr("来源", "Source", "Quelle")} {item.source_url ? (
+                {tr("来源机构", "Source organization", "Quellorganisation")} {item.source_url ? (
                   <a className="market-source-link" href={item.source_url} target="_blank" rel="noreferrer">
                     {item.source}
                   </a>
-                ) : item.source} · {formatTime(item.updated_at)}
+                ) : item.source} · {tr("数据发布时间", "Data published at", "Daten veroeffentlicht am")}: {formatDataTimestamp(item.updated_at)}
               </div>
             </div>
           ))}
@@ -1075,30 +1546,9 @@ export function App() {
             <button onClick={onCollect} disabled={loading}>
               {t("立即抓取", "Collect Now")}
             </button>
+            <button type="button" onClick={() => setActiveTab("stats")}>{tr("统计数据", "Stats", "Statistik")}</button>
           </div>
 
-          <div className="control-right">
-            <div className="control-info-line">
-              {seedResult && (
-                <span className="meta-line compact control-chip">源同步: active {seedResult.active}, inserted {seedResult.inserted}, updated {seedResult.updated}, removed {seedResult.removed}</span>
-              )}
-              {collectResult && (
-                <span className="meta-line compact control-chip">抓取结果: fetched {collectResult.fetched_count}, inserted {collectResult.inserted_count}, duplicate {collectResult.duplicate_count}</span>
-              )}
-              {collectResult?.pruned && (
-                <span className="meta-line compact control-chip">自动清理: news {collectResult.pruned.news}, raw {collectResult.pruned.raw_news}, analysis {collectResult.pruned.analysis}</span>
-              )}
-              {collectStatus && (
-                <>
-                  <span className="meta-line compact control-chip">
-                    抓取状态: {collectStatus.running ? "运行中" : "空闲"}
-                    {collectStatus.current_source ? ` | 当前源: ${collectStatus.current_source}` : ""}
-                    {collectStatus.source_total > 0 ? ` | 进度: ${collectStatus.source_done}/${collectStatus.source_total}` : ""}
-                  </span>
-                </>
-              )}
-            </div>
-          </div>
         </div>
         {collectStatus && (
           <div className="control-progress-full">
@@ -1116,6 +1566,7 @@ export function App() {
 
       <section className="panel news-layout">
         <div className="content-grid">
+          <div className="news-map-zone">
           <aside className="map-panel">
             <h3>{t("媒体来源地区热度（点击筛选）", "Media Origin Heat (click to filter)")}</h3>
             <div className="world-map-wrap">
@@ -1196,6 +1647,13 @@ export function App() {
               </h2>
               <div className="selected-summary">
                 <span>{t("已勾选新闻", "Selected News")}: {selectedNewsIds.length}</span>
+                <button type="button" onClick={() => void checkNewsUpdatesNow()} disabled={checkingUpdates || autoCollecting}>
+                  {autoCollecting
+                    ? tr("自动抓取中...", "Auto collecting...", "Auto-Erfassung...")
+                    : checkingUpdates
+                      ? tr("检查更新中...", "Checking updates...", "Pruefe Updates...")
+                      : tr("立即检查更新", "Check updates now", "Jetzt auf Updates pruefen")}
+                </button>
                 <button
                   type="button"
                   onClick={() => setShowSelectedList((v) => !v)}
@@ -1209,7 +1667,27 @@ export function App() {
                 >
                   {showSelectedOnly ? t("显示全部新闻", "Show all news") : t("只看勾选新闻", "Only selected")}
                 </button>
+                <button
+                  type="button"
+                  onClick={clearSelectedNews}
+                  disabled={selectedNewsIds.length === 0}
+                >
+                  {t("取消全部勾选", "Clear selection")}
+                </button>
               </div>
+              {newsRefreshNotice && <div className="news-refresh-notice">{newsRefreshNotice}</div>}
+              {(selectingNewsLoading || refiningLoading) && (
+                <div className="selection-progress-box">
+                  <div className="selection-progress-label">
+                    {selectingNewsLoading
+                      ? tr("正在按条件筛选并勾选新闻...", "Selecting and checking news...", "Nachrichten werden gefiltert und markiert...")
+                      : tr("正在根据补充条件精简选集...", "Refining selected set...", "Auswahl wird verfeinert...")}
+                  </div>
+                  <div className="selection-progress-track">
+                    <div className="selection-progress-bar" />
+                  </div>
+                </div>
+              )}
               {showSelectedList && (
                 <div className="selected-list-panel">
                   {selectedNewsPreview.length === 0 ? (
@@ -1217,8 +1695,12 @@ export function App() {
                   ) : (
                     selectedNewsPreview.map((item) => (
                       <div key={`selected-${item.id}`} className="selected-list-item">
+                        <span className="selected-item-id">#{item.id}</span>
                         <span className="selected-item-source">{item.source}</span>
                         <span className="selected-item-title">{item.title}</span>
+                        <button type="button" className="selected-item-remove" onClick={() => toggleSelectNews(item.id)}>
+                          {t("取消", "Remove")}
+                        </button>
                       </div>
                     ))
                   )}
@@ -1235,6 +1717,33 @@ export function App() {
                 </button>
               </div>
             )}
+          </div>
+
+          {newsMapBusy && (
+            <div className="news-map-overlay" role="status" aria-live="polite">
+              <div className="news-map-overlay-card">
+                <div className="news-map-overlay-title">
+                  {collectStatus?.running
+                    ? tr("新闻流更新中...", "News stream updating...", "News-Stream wird aktualisiert...")
+                    : checkingUpdates
+                      ? tr("检查更新中...", "Checking updates...", "Pruefe Updates...")
+                      : tr("刷新中...", "Refreshing...", "Aktualisiere...")}
+                </div>
+                {collectStatus?.running && (
+                  <div className="news-map-overlay-sub">
+                    {tr("当前来源", "Current source", "Aktuelle Quelle")}: {collectStatus.current_source || "-"} ({collectStatus.source_done}/{collectStatus.source_total})
+                  </div>
+                )}
+                <div className="selection-progress-track">
+                  {collectStatus?.running ? (
+                    <div className="news-map-progress-fill" style={{ width: `${collectProgressPercent}%` }} />
+                  ) : (
+                    <div className="selection-progress-bar" />
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
           </div>
 
           <aside ref={llmPanelRef} className="llm-panel" onMouseDownCapture={snapLlmPanelToViewport}>
@@ -1277,16 +1786,6 @@ export function App() {
                       </select>
                       <button onClick={() => void loadLlmModels()} disabled={chatLoading}>{t("刷新模型", "Refresh Models")}</button>
                     </div>
-                    <div className="row">
-                      <label className="meta-nowrap">
-                        <input
-                          type="checkbox"
-                          checked={useNewsContext}
-                          onChange={(e) => setUseNewsContext(e.target.checked)}
-                        />
-                        {t("基于新闻上下文", "Use news context")}
-                      </label>
-                    </div>
                     <div className="row llm-select-row">
                       <input
                         className="llm-select-input"
@@ -1313,11 +1812,10 @@ export function App() {
                         </select>
                         <select value={chatLimit} onChange={(e) => setChatLimit(Number(e.target.value))}>
                           <option value={8}>{t("快速(8条)", "Quick (8)")}</option>
-                          <option value={12}>{t("标准(12条)", "Standard (12)")}</option>
-                          <option value={20}>{t("深入(20条)", "Deep (20)")}</option>
-                          <option value={30}>{t("全面(30条)", "Wide (30)")}</option>
-                          <option value={50}>{t("大量(50条, 分批综合)", "Bulk (50)")}</option>
-                          <option value={80}>{t("超大(80条, 分批综合)", "Huge (80)")}</option>
+                          <option value={16}>{t("标准(16条)", "Standard (16)")}</option>
+                          <option value={32}>{t("深入(32条, 分批综合)", "Deep (32)")}</option>
+                          <option value={64}>{t("大量(64条, 分批综合)", "Bulk (64)")}</option>
+                          <option value={120}>{t("极限(120条, 分批综合)", "Max (120)")}</option>
                         </select>
                       </div>
                       <div className="row llm-memory-actions">
@@ -1331,9 +1829,10 @@ export function App() {
                   </div>
 
                   <div className="llm-notes">
-                    <div className="meta-line">{t("说明: 全库模式会从数据库按最新排序抽取最多N条，不是无上限读取全部。", "All mode reads latest N records from DB, not unlimited full scan.")}</div>
-                    <div className="meta-line">{t("当前筛选模式会应用关键词、来源、地区这三类筛选条件。", "Filtered mode applies keyword, source, and region filters.")}</div>
-                    <div className="meta-line">{t("当条数大于20时，后端自动分批分析并做综合汇总。", "When limit > 20, backend uses chunked synthesis.")}</div>
+                    <div className="meta-line">{t("问答流程：先由 LLM 根据问题在当前范围自动勾选新闻，再只基于勾选结果分析。", "Q&A flow: LLM first auto-selects news in current scope, then analyzes only selected items.")}</div>
+                    <div className="meta-line">{t("范围模式只影响自动勾选的候选池（当前筛选 / 全库 / 仅已勾选）。", "Scope mode only affects selection candidate pool (filtered / all / already selected).")}</div>
+                    <div className="meta-line">{t("全库模式已启用随机+来源轮转候选机制，避免按时间或媒体顺序导致的集中偏差。", "All-mode now uses random + source-rotation candidate balancing to reduce time/source ordering bias.")}</div>
+                    <div className="meta-line">{t("条数上限由你选择（8/16/32/64/120），最终分析会截取该上限数量。", "You control analysis size (8/16/32/64/120); final analysis is capped to that selected count.")}</div>
                     <div className="meta-line">{t("可拖拽输入框上方边框手动调节高度。", "Drag top border above input to resize input area.")}</div>
                   </div>
                 </div>
@@ -1341,15 +1840,6 @@ export function App() {
             </div>
 
             <div className="llm-middle-scroll">
-              {(chatLoading || selectingNewsLoading || refiningLoading) && (
-                <div className="llm-generating-hint">
-                  {chatLoading
-                    ? t("LLM 正在生成回复，请稍候...", "LLM is generating a response, please wait...")
-                    : selectingNewsLoading
-                      ? t("LLM 正在筛选新闻并自动勾选，请稍候...", "LLM is selecting news and checking items, please wait...")
-                      : t("LLM 正在补充检索并重分析，请稍候...", "LLM is refining search and rerunning analysis, please wait...")}
-                </div>
-              )}
               {chatHistory.length > renderedChatHistory.length && (
                 <div className="chat-trim-hint">{t(`为保证流畅，仅渲染最近 ${renderedChatHistory.length} 条对话。`, `For performance, only latest ${renderedChatHistory.length} messages are rendered.`)}</div>
               )}
@@ -1368,6 +1858,14 @@ export function App() {
                     </div>
                   </div>
                 ))}
+                {chatLoading && pendingUserPrompt && renderedChatHistory[renderedChatHistory.length - 1]?.text !== pendingUserPrompt && (
+                  <div className="chat-row user">
+                    <div className="chat-bubble user">
+                      <div className="chat-author user">{t("你", "You")}</div>
+                      <div className="chat-markdown">{pendingUserPrompt}</div>
+                    </div>
+                  </div>
+                )}
               </div>
               {!isChatAtBottom && (
                 <button type="button" className="chat-latest-fab" onClick={scrollChatToLatest}>
@@ -1377,6 +1875,15 @@ export function App() {
             </div>
 
             <div className="llm-bottom-fixed">
+              {(chatLoading || selectingNewsLoading || refiningLoading) && (
+                <div className="llm-generating-hint llm-generating-hint-bottom">
+                  {chatLoading
+                    ? t("LLM 正在生成回复，请稍候...", "LLM is generating a response, please wait...")
+                    : selectingNewsLoading
+                      ? t("LLM 正在筛选新闻并自动勾选，请稍候...", "LLM is selecting news and checking items, please wait...")
+                      : t("LLM 正在补充检索并重分析，请稍候...", "LLM is refining search and rerunning analysis, please wait...")}
+                </div>
+              )}
               <div className="chat-input-resizer" onMouseDown={startResizeChatInput} title={t("向上拖拽可增大输入框", "Drag upward to enlarge input")} />
               <textarea
                 ref={chatInputRef}
@@ -1386,16 +1893,28 @@ export function App() {
                 rows={5}
                 style={{ height: `${chatInputHeight}px` }}
               />
-              <button onClick={onChat} disabled={chatLoading}>
-                {chatLoading ? t("分析中...", "Analyzing...") : t("发送给LLM", "Send to LLM")}
-              </button>
+              <div className="llm-input-actions">
+                <button
+                  type="button"
+                  className={`context-toggle ${useNewsContext ? "is-on" : "is-off"}`}
+                  aria-pressed={useNewsContext}
+                  onClick={() => setUseNewsContext((v) => !v)}
+                >
+                  {useNewsContext
+                    ? tr("新闻上下文：已开启", "News context: On", "News-Kontext: Ein")
+                    : tr("新闻上下文：已关闭", "News context: Off", "News-Kontext: Aus")}
+                </button>
+                <button onClick={onChat} disabled={chatLoading || selectingNewsLoading || refiningLoading}>
+                  {chatLoading ? tr("生成回答中...", "Generating response...", "Antwort wird erstellt...") : tr("发送给LLM", "Send to LLM", "An LLM senden")}
+                </button>
+              </div>
             </div>
           </aside>
         </div>
       </section>
 
       </>
-      ) : (
+      ) : activeTab === "owid" ? (
         <section className="panel owid-panel">
           <div className="owid-header-row">
             <h2>{tr("OWID 随机数据模块", "OWID Random Data Modules", "OWID Zufallsdaten-Module")}</h2>
@@ -1409,6 +1928,185 @@ export function App() {
             {owidModules.length > 0 ? owidModules : <div className="meta-line">{tr("暂无数据", "No data yet", "Noch keine Daten")}</div>}
           </div>
         </section>
+      ) : (
+        <section className="panel stats-panel">
+          <div className="stats-header-row">
+            <h2>{tr("新闻刷新统计", "News Refresh Statistics", "News-Refresh-Statistik")}</h2>
+            <div className="row">
+              <button type="button" onClick={() => setActiveTab("dashboard")}>{tr("返回总览", "Back to dashboard", "Zurueck zur Uebersicht")}</button>
+              <button type="button" onClick={() => setRefreshStats([])} disabled={refreshStats.length === 0}>{tr("清空统计", "Clear stats", "Statistik leeren")}</button>
+            </div>
+          </div>
+
+          {collectStatus && (
+            <div className="stats-capture-status">
+              <div className="stats-capture-title">
+                {tr("抓取状态", "Collection status", "Erfassungsstatus")}: {collectStatus.running ? tr("运行中", "Running", "Laeuft") : tr("空闲", "Idle", "Leerlauf")}
+              </div>
+              <div className="stats-capture-sub">
+                {tr("当前源", "Current source", "Aktuelle Quelle")}: {collectStatus.current_source || "-"} · {tr("进度", "Progress", "Fortschritt")}: {collectStatus.source_done}/{collectStatus.source_total}
+              </div>
+              <div className="progress-track full">
+                <div className="progress-bar" style={{ width: `${collectProgressPercent}%` }} />
+              </div>
+            </div>
+          )}
+
+          <div className="stats-info-strip">
+            {seedResult && (
+              <span className="meta-line compact control-chip">{tr("源同步", "Source sync", "Quellen-Sync")}: active {seedResult.active}, inserted {seedResult.inserted}, updated {seedResult.updated}, removed {seedResult.removed}</span>
+            )}
+            {collectResult && (
+              <span className="meta-line compact control-chip">{tr("抓取结果", "Collect result", "Erfassungsresultat")}: fetched {collectResult.fetched_count}, inserted {collectResult.inserted_count}, duplicate {collectResult.duplicate_count}</span>
+            )}
+            {collectResult?.pruned && (
+              <span className="meta-line compact control-chip">{tr("自动清理", "Auto prune", "Auto-Bereinigung")}: news {collectResult.pruned.news}, raw {collectResult.pruned.raw_news}, analysis {collectResult.pruned.analysis}</span>
+            )}
+          </div>
+
+          <div className="stats-grid">
+            <div className="stats-card"><div className="stats-k">{tr("检查次数", "Checks", "Pruefungen")}</div><div className="stats-v">{refreshStatsSummary.totalChecks}</div></div>
+            <div className="stats-card"><div className="stats-k">{tr("新增总数", "Total new", "Neue gesamt")}</div><div className="stats-v">{refreshStatsSummary.totalAdded}</div></div>
+            <div className="stats-card"><div className="stats-k">{tr("平均每分钟新增", "Avg new/min", "Ø neu/min")}</div><div className="stats-v">{refreshStatsSummary.avgPerMinute.toFixed(2)}</div></div>
+            <div className="stats-card"><div className="stats-k">{tr("每次检查平均新增", "Avg/check", "Ø je Pruefung")}</div><div className="stats-v">{refreshStatsSummary.avgPerCheck.toFixed(2)}</div></div>
+            <div className="stats-card"><div className="stats-k">{tr("有新增的次数", "Checks with new", "Pruefungen mit neuen")}</div><div className="stats-v">{refreshStatsSummary.withNew}</div></div>
+            <div className="stats-card"><div className="stats-k">{tr("单次最大新增", "Max in one check", "Max pro Pruefung")}</div><div className="stats-v">{refreshStatsSummary.maxAdded}</div></div>
+          </div>
+
+          <div className="stats-plot-grid">
+            <div className="stats-plot-card">
+              <h4>{tr("刷新新增趋势", "New items per refresh", "Neue Eintraege je Refresh")}</h4>
+              <Plot
+                data={[{ x: refreshTrend.x, y: refreshTrend.y, type: "bar", marker: { color: "#3c7e73" } }]}
+                layout={{ autosize: true, height: 300, margin: { l: 46, r: 12, t: 8, b: 54 }, xaxis: { tickangle: -25 }, yaxis: { title: { text: tr("新增条数", "New items", "Neue Eintraege") } }, paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(255,255,255,0.6)" }}
+                config={{ displayModeBar: false, responsive: true }}
+                style={{ width: "100%", height: "300px" }}
+                useResizeHandler
+              />
+            </div>
+            <div className="stats-plot-card">
+              <h4>{tr("媒体地区分布", "Media region distribution", "Medien-Regionenverteilung")}</h4>
+              <Plot
+                data={[{ labels: regionDistribution.map((x) => x.label), values: regionDistribution.map((x) => x.value), type: "pie", hole: 0.45, marker: { colors: ["#4f8b80", "#5f7eb3", "#c9833a", "#8b6cb0", "#53a289", "#9c9588"] } }]}
+                layout={{ autosize: true, height: 300, margin: { l: 10, r: 10, t: 6, b: 6 }, paper_bgcolor: "rgba(0,0,0,0)" }}
+                config={{ displayModeBar: false, responsive: true }}
+                style={{ width: "100%", height: "300px" }}
+                useResizeHandler
+              />
+            </div>
+            <div className="stats-plot-card">
+              <h4>{tr("新增新闻按地区统计", "New items by region", "Neue Eintraege nach Region")}</h4>
+              <Plot
+                data={[{ x: addedByRegionStats.map((x) => x.label), y: addedByRegionStats.map((x) => x.value), type: "bar", marker: { color: "#7b9fce" } }]}
+                layout={{ autosize: true, height: 300, margin: { l: 36, r: 10, t: 8, b: 40 }, paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(255,255,255,0.6)", yaxis: { title: { text: tr("新增条数", "New items", "Neue Eintraege") } } }}
+                config={{ displayModeBar: false, responsive: true }}
+                style={{ width: "100%", height: "300px" }}
+                useResizeHandler
+              />
+            </div>
+          </div>
+
+          <div className="stats-table-wrap">
+            <h4>{tr("最近刷新记录", "Recent refresh log", "Letzte Refresh-Protokolle")}</h4>
+            <table className="stats-table">
+              <thead>
+                <tr>
+                  <th>{tr("时间", "Time", "Zeit")}</th>
+                  <th>{tr("来源", "Trigger", "Ausloeser")}</th>
+                  <th>{tr("新增", "Added", "Neu")}</th>
+                  <th>{tr("抓取入库", "Inserted", "Eingefuegt")}</th>
+                  <th>{tr("抓取重复", "Duplicate", "Duplikat")}</th>
+                  <th>{tr("当前源", "Current source", "Aktuelle Quelle")}</th>
+                  <th>{tr("查询", "Query", "Abfrage")}</th>
+                  <th>{tr("地区", "Region", "Region")}</th>
+                  <th>{tr("勾选", "Selected", "Auswahl")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {refreshStats.slice(0, 80).map((r, idx) => (
+                  <tr key={`stat-${idx}-${r.ts}`}>
+                    <td>{formatTime(r.ts)}</td>
+                    <td>{r.trigger}</td>
+                    <td>{r.added}</td>
+                    <td>{r.inserted_count ?? "-"}</td>
+                    <td>{r.duplicate_count ?? "-"}</td>
+                    <td>{r.current_source || "-"}</td>
+                    <td>{r.q || "-"}</td>
+                    <td>{regionLabel(r.region, lang)}</td>
+                    <td>{r.selected_count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {activeMarketItem && (
+        <div className="data-modal-overlay" onClick={() => setMarketModalKey(null)}>
+          <div className="data-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="data-modal-header">
+              <h3>{activeMarketItem.label}</h3>
+              <button type="button" onClick={() => setMarketModalKey(null)}>{tr("关闭", "Close", "Schliessen")}</button>
+            </div>
+            <div className="data-modal-sub">
+              {tr("来源机构", "Source organization", "Quellorganisation")}: {activeMarketItem.source_url ? (
+                <a href={activeMarketItem.source_url} target="_blank" rel="noreferrer">{activeMarketItem.source}</a>
+              ) : activeMarketItem.source}
+              {" · "}
+              {tr("数据发布时间", "Data published at", "Daten veroeffentlicht am")}: {formatDataTimestamp(activeMarketItem.updated_at)}
+            </div>
+            <div className="data-modal-range-row">
+              {([
+                ["15m", tr("15分钟", "15m", "15m")],
+                ["1h", tr("1小时", "1h", "1h")],
+                ["6h", tr("6小时", "6h", "6h")],
+                ["24h", tr("24小时", "24h", "24h")],
+                ["all", tr("全部", "All", "Alle")],
+              ] as [MarketRange, string][]).map(([key, label]) => (
+                <button
+                  key={`range-${key}`}
+                  type="button"
+                  className={`data-range-btn ${marketRange === key ? "active" : ""}`}
+                  onClick={() => setMarketRange(key)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <Plot
+              data={[
+                {
+                  x: activeMarketSeries.map((p) => p.ts),
+                  y: activeMarketSeries.map((p) => p.price),
+                  type: "scatter",
+                  mode: "lines+markers",
+                  line: { color: "#2f7f6f", width: 2.4 },
+                  marker: { color: "#2f7f6f", size: 4 },
+                  hovertemplate: "%{x}<br>%{y}<extra></extra>",
+                },
+              ]}
+              layout={{
+                autosize: true,
+                height: 360,
+                margin: { l: 56, r: 14, t: 10, b: 56 },
+                paper_bgcolor: "rgba(0,0,0,0)",
+                plot_bgcolor: "rgba(255,255,255,0.7)",
+                xaxis: {
+                  title: { text: tr("时间", "Time", "Zeit") },
+                  tickangle: -20,
+                },
+                yaxis: {
+                  title: { text: activeMarketItem.unit || tr("数值", "Value", "Wert") },
+                },
+                showlegend: false,
+              }}
+              config={{ displayModeBar: false, responsive: true }}
+              style={{ width: "100%", height: "360px" }}
+              useResizeHandler
+            />
+          </div>
+        </div>
       )}
 
       {showCreditsModal && (

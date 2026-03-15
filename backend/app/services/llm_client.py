@@ -165,7 +165,7 @@ def _call_openai(system_prompt: str, user_prompt: str) -> str | None:
         response = requests.post(
             "https://api.openai.com/v1/chat/completions",
             headers={
-                "Authorization": f"Bearer {settings.openai_api_key}",
+                "Authorization": f"Bearer {_runtime_openai_key}",
                 "Content-Type": "application/json",
             },
             json={

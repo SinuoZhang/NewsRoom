@@ -4,6 +4,7 @@ import html
 import json
 import os
 from pathlib import Path
+import random
 import re
 
 import feedparser
@@ -21,16 +22,21 @@ from app.schemas import (
     FinanceHeadlineOut,
     LlmChatIn,
     LlmChatOut,
+    LlmConfigIn,
+    LlmConfigOut,
     LlmMemoryAppendIn,
     LlmRefineRerunIn,
     LlmRefineRerunOut,
     LlmSelectNewsIn,
+    LlmSelectIntentIn,
+    LlmSelectIntentOut,
     LlmSelectNewsItemOut,
     LlmSelectNewsOut,
     LlmModelSelectIn,
     LlmModelsOut,
     MarketSnapshotOut,
     NewsOut,
+    OwidRandomModuleOut,
     OwidSeriesOut,
     SourceOut,
     TranslateIn,
@@ -38,9 +44,16 @@ from app.schemas import (
 )
 from app.services.analyzer import analyze_news
 from app.services.jobs import get_collect_status, run_collect_job
-from app.services.llm_client import chat_with_llm, get_llm_identity, list_llm_models, select_llm_model
+from app.services.llm_client import (
+    chat_with_llm,
+    get_llm_config,
+    get_llm_identity,
+    list_llm_models,
+    select_llm_model,
+    set_llm_config,
+)
 from app.services.market_data import get_market_snapshot
-from app.services.owid_data import get_owid_series
+from app.services.owid_data import get_owid_random_modules, get_owid_series
 
 router = APIRouter()
 CHAT_MEMORY_FILE = Path(__file__).resolve().parents[3] / "logs" / "llm_chat_memory.jsonl"
@@ -162,6 +175,26 @@ def _reply_language_instruction(reply_lang: str) -> str:
     if reply_lang == "de":
         return "Reply in German by default."
     return "Reply in English by default."
+
+
+def _detect_select_intent_operation(instruction: str) -> tuple[str, str]:
+    text = instruction.strip().lower()
+    if not text:
+        return "chat", "Empty instruction; fallback to chat."
+
+    if any(x in text for x in ["补充", "refine", "rerun", "重新分析", "再跑", "missing", "gap"]):
+        return "refine_rerun", "Instruction asks for refinement or rerun with missing information."
+
+    if any(x in text for x in ["清空", "clear", "取消全部", "unselect all", "remove all"]):
+        return "clear_selection", "Instruction asks to clear current selected news."
+
+    if any(x in text for x in ["替换", "replace", "重选", "重置", "reset selection"]):
+        return "replace_selection", "Instruction asks to replace current selected news set."
+
+    if any(x in text for x in ["勾选", "选择", "append", "add", "新增", "加入"]):
+        return "append_selection", "Instruction asks to add news into current selection."
+
+    return "chat", "No explicit selection/refine intent detected; treat as normal chat."
 
 
 def _append_chat_memory(role: str, text: str, provider: str | None = None, model: str | None = None) -> None:
@@ -288,6 +321,167 @@ def _apply_region_filter(query, region: str | None):
         return query
 
     return query.join(Source, News.source_id == Source.id).filter(clause)
+
+
+def _rebalance_rows_by_source(rows: list[News], target: int) -> list[News]:
+    if target <= 0 or len(rows) <= target:
+        return rows
+
+    by_source: dict[int, list[News]] = {}
+    for row in rows:
+        by_source.setdefault(row.source_id, []).append(row)
+
+    source_ids = list(by_source.keys())
+    random.shuffle(source_ids)
+    for sid in source_ids:
+        random.shuffle(by_source[sid])
+
+    merged: list[News] = []
+    while len(merged) < target:
+        progressed = False
+        for sid in source_ids:
+            bucket = by_source[sid]
+            if not bucket:
+                continue
+            merged.append(bucket.pop())
+            progressed = True
+            if len(merged) >= target:
+                break
+        if not progressed:
+            break
+    return merged
+
+
+def _detect_instruction_region_hints(instruction: str) -> set[str]:
+    text = (instruction or "").strip().lower()
+    if not text:
+        return set()
+
+    hints: set[str] = set()
+    if re.search(r"\b(europe|eu|uk|germany|france|italy|spain|european)\b|欧洲|欧盟|英国|德国|法国|意大利|西班牙", text):
+        hints.add("europe")
+    if re.search(r"\b(middle\s*east|gulf|iran|israel|saudi|uae|qatar)\b|中东|海湾|伊朗|以色列|沙特|阿联酋|卡塔尔", text):
+        hints.add("middle_east")
+    if re.search(r"\b(us|usa|united\s*states|canada|north\s*america|fed|washington)\b|美国|加拿大|北美|美联储", text):
+        hints.add("north_america")
+    if re.search(r"\b(china|hong\s*kong|taiwan|greater\s*china|beijing)\b|中国|香港|台湾|大中华|北京", text):
+        hints.add("greater_china")
+    if re.search(r"\b(southeast\s*asia|asean|singapore|malaysia|indonesia|thailand|vietnam|philippines)\b|东南亚|东盟|新加坡|马来西亚|印尼|泰国|越南|菲律宾", text):
+        hints.add("se_asia")
+    return hints
+
+
+def _allocate_region_quota(region_sizes: dict[str, int], target: int, hint_regions: set[str]) -> dict[str, int]:
+    active_regions = [k for k, v in region_sizes.items() if v > 0]
+    if not active_regions or target <= 0:
+        return {k: 0 for k in region_sizes}
+
+    weighted: dict[str, float] = {}
+    for region in active_regions:
+        base = max(1.0, float(region_sizes[region]) ** 0.5)
+        if hint_regions:
+            base *= 2.1 if region in hint_regions else 0.85
+        weighted[region] = base
+
+    weight_sum = sum(weighted.values()) or 1.0
+    raw = {region: (weighted[region] / weight_sum) * target for region in active_regions}
+
+    quota = {region: min(region_sizes[region], int(raw[region])) for region in active_regions}
+    assigned = sum(quota.values())
+    remain = max(0, target - assigned)
+
+    order = sorted(active_regions, key=lambda r: (raw[r] - int(raw[r])), reverse=True)
+    while remain > 0:
+        progressed = False
+        for region in order:
+            if quota[region] >= region_sizes[region]:
+                continue
+            quota[region] += 1
+            remain -= 1
+            progressed = True
+            if remain <= 0:
+                break
+        if not progressed:
+            break
+
+    out = {k: 0 for k in region_sizes}
+    out.update(quota)
+    return out
+
+
+def _pick_with_source_rotation(rows: list[News], take: int) -> list[News]:
+    if take <= 0 or not rows:
+        return []
+
+    by_source: dict[int, list[News]] = {}
+    for row in rows:
+        by_source.setdefault(row.source_id, []).append(row)
+
+    source_ids = list(by_source.keys())
+    random.shuffle(source_ids)
+    for sid in source_ids:
+        random.shuffle(by_source[sid])
+
+    picked: list[News] = []
+    while len(picked) < take:
+        progressed = False
+        for sid in source_ids:
+            bucket = by_source[sid]
+            if not bucket:
+                continue
+            picked.append(bucket.pop())
+            progressed = True
+            if len(picked) >= take:
+                break
+        if not progressed:
+            break
+    return picked
+
+
+def _rebalance_rows_by_region_and_source(rows: list[News], target: int, instruction: str) -> list[News]:
+    if target <= 0 or len(rows) <= target:
+        return rows
+
+    hint_regions = _detect_instruction_region_hints(instruction)
+    by_region: dict[str, list[News]] = {}
+    for row in rows:
+        source_name = row.source.name if row.source else ""
+        region = _region_from_source_name(source_name)
+        by_region.setdefault(region, []).append(row)
+
+    region_sizes = {region: len(items) for region, items in by_region.items()}
+    quotas = _allocate_region_quota(region_sizes, target, hint_regions)
+
+    merged: list[News] = []
+    leftovers: list[News] = []
+    for region, items in by_region.items():
+        random.shuffle(items)
+        take = quotas.get(region, 0)
+        picked = _pick_with_source_rotation(items, take)
+        merged.extend(picked)
+        picked_ids = {x.id for x in picked}
+        leftovers.extend([x for x in items if x.id not in picked_ids])
+
+    if len(merged) < target and leftovers:
+        merged.extend(_pick_with_source_rotation(leftovers, target - len(merged)))
+
+    return merged[:target]
+
+
+def _load_llm_select_candidates(query, mode: str, requested_limit: int, instruction: str = "") -> list[News]:
+    if mode != "all":
+        ordered_query = query.order_by(func.coalesce(News.published_at, News.collected_at).desc(), News.id.desc())
+        if requested_limit <= 0:
+            return ordered_query.all()
+        cap = min(max(requested_limit, 1), 500)
+        return ordered_query.limit(cap).all()
+
+    # For all-mode, avoid bias from pure recency/source ordering.
+    target = 600 if requested_limit <= 0 else min(max(requested_limit, 1), 1200)
+    random_rows = query.order_by(func.random()).limit(target * 2).all()
+    if not random_rows:
+        return []
+    return _rebalance_rows_by_region_and_source(random_rows, target, instruction)
 
 DEFAULT_SOURCES = [
     {
@@ -633,8 +827,8 @@ def collect_status():
 
 
 @router.get("/market/snapshot", response_model=MarketSnapshotOut)
-def market_snapshot():
-    return get_market_snapshot()
+def market_snapshot(force: bool = Query(default=False)):
+    return get_market_snapshot(force_refresh=force)
 
 
 @router.get("/market/finance-news", response_model=list[FinanceHeadlineOut])
@@ -673,6 +867,17 @@ def owid_series(
         raise HTTPException(status_code=400, detail=f"OWID query failed: {exc}") from exc
 
 
+@router.get("/owid/random", response_model=list[OwidRandomModuleOut])
+def owid_random_modules(
+    count: int = Query(default=10, ge=1, le=20),
+    points_limit: int = Query(default=40, ge=10, le=120),
+):
+    try:
+        return get_owid_random_modules(count=count, points_limit=points_limit)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"OWID random module fetch failed: {exc}") from exc
+
+
 @router.post("/llm/chat", response_model=LlmChatOut)
 def llm_chat(payload: LlmChatIn, db: Session = Depends(get_db)):
     reply_lang = _resolve_reply_language(payload.message, payload.ui_lang)
@@ -708,7 +913,7 @@ def llm_chat(payload: LlmChatIn, db: Session = Depends(get_db)):
         if payload.mode == "filtered" and payload.q:
             query = query.filter(News.title.ilike(f"%{payload.q}%"))
 
-    limit = min(max(payload.limit, 1), 80)
+    limit = min(max(payload.limit, 1), 120)
     rows = query.order_by(func.coalesce(News.published_at, News.collected_at).desc(), News.id.desc()).limit(limit).all()
 
     used_count = len(rows)
@@ -908,12 +1113,7 @@ def llm_select_news(payload: LlmSelectNewsIn, db: Session = Depends(get_db)):
             query = query.filter(News.title.ilike(f"%{payload.q}%"))
 
     unlimited_mode = payload.limit <= 0
-    ordered_query = query.order_by(func.coalesce(News.published_at, News.collected_at).desc(), News.id.desc())
-    if unlimited_mode:
-        rows = ordered_query.all()
-    else:
-        limit = min(max(payload.limit, 1), 500)
-        rows = ordered_query.limit(limit).all()
+    rows = _load_llm_select_candidates(query, payload.mode, payload.limit, payload.instruction)
     if not rows:
         provider, model = get_llm_identity()
         return LlmSelectNewsOut(
@@ -1071,7 +1271,7 @@ def llm_refine_rerun(payload: LlmRefineRerunIn, db: Session = Depends(get_db)):
         use_chat_history=payload.use_chat_history,
         history_turns=payload.history_turns,
         news_ids=merged_ids,
-        limit=min(max(payload.limit, 1), 80),
+        limit=min(max(payload.limit, 1), 120),
     )
     chat_result = llm_chat(chat_payload, db)
 
@@ -1104,6 +1304,30 @@ def llm_refine_rerun(payload: LlmRefineRerunIn, db: Session = Depends(get_db)):
         keywords=keywords[:10],
         missing_points=missing_points[:8],
     )
+
+
+@router.post("/llm/select-intent", response_model=LlmSelectIntentOut)
+def llm_select_intent(payload: LlmSelectIntentIn):
+    instruction = (payload.instruction or "").strip()
+    if not instruction:
+        raise HTTPException(status_code=400, detail="instruction is required")
+
+    operation, reason = _detect_select_intent_operation(instruction)
+    provider, model = get_llm_identity()
+    return LlmSelectIntentOut(operation=operation, reason=reason, provider=provider, model=model)
+
+
+@router.get("/llm/config", response_model=LlmConfigOut)
+def llm_config_get():
+    return get_llm_config()
+
+
+@router.post("/llm/config", response_model=LlmConfigOut)
+def llm_config_set(payload: LlmConfigIn):
+    try:
+        return set_llm_config(payload.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/llm/models", response_model=LlmModelsOut)

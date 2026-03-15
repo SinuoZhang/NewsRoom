@@ -52,10 +52,13 @@ This document lists third-party Python and JavaScript dependencies used by this 
 | react-dom | `frontend/src/main.tsx` | DOM rendering |
 | react-markdown | `frontend/src/App.tsx` | Render markdown responses |
 | remark-gfm | `frontend/src/App.tsx` | GitHub-Flavored Markdown support |
+| react-plotly.js | `frontend/src/App.tsx` | Interactive OWID data chart rendering |
+| plotly.js-basic-dist-min | `frontend/src/App.tsx` | Plotly chart engine bundle |
 | vite | `frontend/package.json` scripts | Dev server and build tool |
 | @vitejs/plugin-react | `frontend/vite.config.ts` | React transform for Vite |
 | typescript | `frontend/package.json` scripts | Type checking/build |
 | @types/react, @types/react-dom | Type system only | Type definitions |
+| @types/react-plotly.js, @types/plotly.js | Type system only | Plotly type definitions |
 
 ### Lockfile Families (Grouped)
 
@@ -66,6 +69,7 @@ This document lists third-party Python and JavaScript dependencies used by this 
 | `@babel/*` | Build transform toolchain for React/TypeScript |
 | `@types/*` | Type declaration packages |
 | `micromark*`, `mdast-util-*`, `hast-util-*`, `unist-util-*` | Markdown parsing/rendering stack behind `react-markdown` |
+| `plotly.js-*`, `react-plotly.js` | Browser-side charting stack used in OWID data view |
 
 ## Python Packages (Backend Environment)
 

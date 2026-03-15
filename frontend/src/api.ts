@@ -128,6 +128,27 @@ export type LlmModelsOut = {
   can_switch: boolean;
 };
 
+export type LlmConfigOut = {
+  provider: string;
+  current_model: string;
+  openai_model: string;
+  gemini_model: string;
+  ollama_model: string;
+  ollama_available: boolean;
+  openai_configured: boolean;
+  gemini_configured: boolean;
+};
+
+export type LlmConfigIn = {
+  provider: "ollama" | "openai" | "gemini";
+  model?: string;
+  openai_api_key?: string;
+  openai_model?: string;
+  gemini_api_key?: string;
+  gemini_model?: string;
+  persist?: boolean;
+};
+
 export type LlmSelectNewsIn = {
   instruction: string;
   mode: "filtered" | "all" | "selected";
@@ -249,6 +270,17 @@ export type OwidSeries = {
   fetched_at: string;
 };
 
+export type OwidRandomModule = {
+  indicator: string;
+  entity: string;
+  title: string;
+  source_url: string;
+  page_url: string;
+  unit: string | null;
+  points: OwidPoint[];
+  fetched_at: string;
+};
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     headers: { "Content-Type": "application/json" },
@@ -310,11 +342,18 @@ export const api = {
     requestWithTimeout<LlmSelectNewsOut>("/api/llm/select-news", { method: "POST", body: JSON.stringify(payload) }, 420000),
   llmRefineRerun: (payload: LlmRefineRerunIn) =>
     requestWithTimeout<LlmRefineRerunOut>("/api/llm/refine-rerun", { method: "POST", body: JSON.stringify(payload) }, 420000),
+  llmSelectIntent: (instruction: string, recent_messages: Array<{ role: string; text: string }> = []) =>
+    request<{ operation: string; reason: string; provider: string; model: string }>("/api/llm/select-intent", {
+      method: "POST",
+      body: JSON.stringify({ instruction, recent_messages })
+    }),
   getLlmModels: () => request<LlmModelsOut>("/api/llm/models"),
   selectLlmModel: (model: string) => request<LlmModelsOut>("/api/llm/models/select", { method: "POST", body: JSON.stringify({ model }) }),
+  getLlmConfig: () => request<LlmConfigOut>("/api/llm/config"),
+  setLlmConfig: (payload: LlmConfigIn) => request<LlmConfigOut>("/api/llm/config", { method: "POST", body: JSON.stringify(payload) }),
   getLlmMemory: () => request<{ items: LlmMemoryItem[] }>("/api/llm/memory?hours=24"),
   clearLlmMemory: () => request<{ cleared: boolean }>("/api/llm/memory", { method: "DELETE" }),
-  getMarketSnapshot: () => request<MarketSnapshot>("/api/market/snapshot"),
+  getMarketSnapshot: (force = false) => request<MarketSnapshot>(`/api/market/snapshot?force=${force ? "true" : "false"}`),
   getOwidSeries: (params: { indicator: string; entity?: string; limit?: number }) => {
     const query = new URLSearchParams();
     query.set("indicator", params.indicator);
@@ -322,6 +361,8 @@ export const api = {
     if (params.limit) query.set("limit", String(params.limit));
     return request<OwidSeries>(`/api/owid/series?${query.toString()}`);
   },
+  getOwidRandomModules: (count = 10, pointsLimit = 40) =>
+    request<OwidRandomModule[]>(`/api/owid/random?count=${count}&points_limit=${pointsLimit}`),
   translateText: (payload: TranslateIn) =>
     requestWithTimeout<TranslateOut>("/api/translate", { method: "POST", body: JSON.stringify(payload) }, 45000),
   getFinanceHeadlines: (limit = 8) => request<FinanceHeadline[]>(`/api/market/finance-news?limit=${limit}`),
