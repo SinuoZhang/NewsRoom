@@ -254,6 +254,116 @@ is_valid_port() {
   [ "$p" -ge 1 ] && [ "$p" -le 65535 ]
 }
 
+is_port_in_use() {
+  local p="$1"
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -iTCP:"$p" -sTCP:LISTEN >/dev/null 2>&1
+    return $?
+  fi
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltn "sport = :$p" | tail -n +2 | grep -q .
+    return $?
+  fi
+  return 1
+}
+
+prompt_with_default() {
+  local prompt_zh="$1"
+  local prompt_en="$2"
+  local prompt_de="$3"
+  local default_val="$4"
+  local out
+  read -r -p "$(msg "$prompt_zh" "$prompt_en" "$prompt_de") [$default_val]: " out
+  if [ -z "$out" ]; then
+    out="$default_val"
+  fi
+  printf "%s" "$out"
+}
+
+prompt_port_with_default() {
+  local prompt_zh="$1"
+  local prompt_en="$2"
+  local prompt_de="$3"
+  local default_val="$4"
+  local out
+  while true; do
+    out="$(prompt_with_default "$prompt_zh" "$prompt_en" "$prompt_de" "$default_val")"
+    if is_valid_port "$out"; then
+      if is_port_in_use "$out"; then
+        say "端口 $out 当前已被占用，请换一个。" "Port $out is already in use, choose another one." "Port $out ist bereits belegt, bitte einen anderen waehlen."
+        continue
+      fi
+      printf "%s" "$out"
+      return 0
+    fi
+    say "端口必须是 1-65535 的数字。" "Port must be a number in 1-65535." "Port muss eine Zahl zwischen 1 und 65535 sein."
+  done
+}
+
+configure_runtime_if_needed() {
+  set -a
+  # shellcheck disable=SC1090
+  source "$BACKEND_ENV"
+  set +a
+
+  local backend_host_current="${BACKEND_HOST:-0.0.0.0}"
+  local backend_port_current="${BACKEND_PORT:-8000}"
+  local frontend_host_current="${FRONTEND_HOST:-0.0.0.0}"
+  local frontend_port_current="${FRONTEND_PORT:-5173}"
+  local api_base_current="${VITE_API_BASE:-http://localhost:${backend_port_current}}"
+  local need_setup="false"
+
+  if [ -z "${BACKEND_HOST:-}" ] || [ -z "${BACKEND_PORT:-}" ] || [ -z "${FRONTEND_HOST:-}" ] || [ -z "${FRONTEND_PORT:-}" ] || [ -z "${VITE_API_BASE:-}" ]; then
+    need_setup="true"
+  fi
+
+  if [ "$need_setup" = "true" ]; then
+    say "首次安装检测到启动地址配置不完整。" "First-time setup detected incomplete runtime endpoint config." "Bei der Erstinstallation wurde eine unvollstaendige Endpunkt-Konfiguration erkannt."
+    printf "%s\n" "$(msg "默认值：" "Defaults:" "Standardwerte:")"
+    printf "- BACKEND_HOST=%s\n" "$backend_host_current"
+    printf "- BACKEND_PORT=%s\n" "$backend_port_current"
+    printf "- FRONTEND_HOST=%s\n" "$frontend_host_current"
+    printf "- FRONTEND_PORT=%s\n" "$frontend_port_current"
+    printf "- VITE_API_BASE=%s\n" "$api_base_current"
+    printf "\n%s\n" "$(msg "端口范围：1-65535（建议 1024 以上）。" "Port range: 1-65535 (recommend >1024)." "Port-Bereich: 1-65535 (empfohlen >1024).")"
+    printf "%s\n" "$(msg "常见已占用端口示例：22(SSH), 80/443(Web), 3306(MySQL), 5432(Postgres), 6379(Redis), 8000/8080(开发服务常见)。" "Commonly occupied ports: 22(SSH), 80/443(Web), 3306(MySQL), 5432(Postgres), 6379(Redis), 8000/8080(common dev services)." "Hauefig belegte Ports: 22(SSH), 80/443(Web), 3306(MySQL), 5432(Postgres), 6379(Redis), 8000/8080(haeufige Dev-Dienste).")"
+    printf "%s\n" "$(msg "输入后会自动检查端口是否已被占用。" "Entered ports will be checked for availability automatically." "Eingegebene Ports werden automatisch auf Belegung geprueft.")"
+
+    if ! ask_yes_no "是否现在覆盖默认端口/API 地址？" "Override default ports/API base now?" "Standard-Ports/API-Basis jetzt ueberschreiben?" "Y"; then
+      return 0
+    fi
+  else
+    return 0
+  fi
+
+  say "回车可保持默认值。" "Press Enter to keep defaults." "Enter druecken, um Standardwerte zu behalten."
+
+  local backend_host_new
+  local backend_port_new
+  local frontend_host_new
+  local frontend_port_new
+  local api_base_new
+
+  backend_host_new="$(prompt_with_default "后端监听地址 BACKEND_HOST" "Backend host BACKEND_HOST" "Backend-Host BACKEND_HOST" "$backend_host_current")"
+  backend_port_new="$(prompt_port_with_default "后端端口 BACKEND_PORT" "Backend port BACKEND_PORT" "Backend-Port BACKEND_PORT" "$backend_port_current")"
+  frontend_host_new="$(prompt_with_default "前端监听地址 FRONTEND_HOST" "Frontend host FRONTEND_HOST" "Frontend-Host FRONTEND_HOST" "$frontend_host_current")"
+  frontend_port_new="$(prompt_port_with_default "前端端口 FRONTEND_PORT" "Frontend port FRONTEND_PORT" "Frontend-Port FRONTEND_PORT" "$frontend_port_current")"
+  api_base_new="$(prompt_with_default "前端 API 地址 VITE_API_BASE" "Frontend API base VITE_API_BASE" "Frontend-API-Basis VITE_API_BASE" "http://localhost:${backend_port_new}")"
+
+  upsert_env_line "BACKEND_HOST" "$backend_host_new" "$BACKEND_ENV"
+  upsert_env_line "BACKEND_PORT" "$backend_port_new" "$BACKEND_ENV"
+  upsert_env_line "FRONTEND_HOST" "$frontend_host_new" "$BACKEND_ENV"
+  upsert_env_line "FRONTEND_PORT" "$frontend_port_new" "$BACKEND_ENV"
+  upsert_env_line "VITE_API_BASE" "$api_base_new" "$BACKEND_ENV"
+
+  if [ -z "${CORS_ORIGINS:-}" ] || [ "${CORS_ORIGINS:-}" = "http://localhost:5173" ] || [ "${CORS_ORIGINS:-}" = "http://localhost:${frontend_port_current}" ]; then
+    upsert_env_line "CORS_ORIGINS" "http://localhost:${frontend_port_new}" "$BACKEND_ENV"
+  fi
+
+  chmod 600 "$BACKEND_ENV" || true
+  log_config "Runtime guided setup backend=${backend_host_new}:${backend_port_new} frontend=${frontend_host_new}:${frontend_port_new} api_base=${api_base_new}"
+}
+
 load_runtime_overrides() {
   set -a
   # shellcheck disable=SC1090
