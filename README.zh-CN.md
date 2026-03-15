@@ -32,36 +32,62 @@ NewsRoom 是一个本地新闻聚合 + LLM 分析系统。
 Ubuntu / Debian：
 
 ```bash
+# 更新系统软件索引
 sudo apt-get update
+# 安装 git、curl、Python 和 Node.js 基础工具
 sudo apt-get install -y git curl python3 python3-venv python3-pip nodejs npm
 ```
 
 Fedora：
 
 ```bash
+# 安装基础工具
 sudo dnf install -y git curl python3 python3-virtualenv nodejs npm
 ```
 
 Arch：
 
 ```bash
+# 安装基础工具
 sudo pacman -S --needed git curl python nodejs npm
 ```
 
 ### 3.2 拉取代码并启动
 
+如果你已经配置了 GitHub SSH Key：
+
 ```bash
-git clone <你的仓库地址>
+# 通过 SSH 克隆仓库
+git clone git@github.com:SinuoZhang/NewsRoom.git
+# 进入项目目录
 cd NewsRoom
+# 赋予启动脚本可执行权限
 chmod +x start_local.sh
+# 启动交互式安装/运行向导
+./start_local.sh
+```
+
+如果你还没配置 SSH（新手更容易上手）：
+
+```bash
+# 通过 HTTPS 克隆仓库
+git clone https://github.com/SinuoZhang/NewsRoom.git
+# 进入项目目录
+cd NewsRoom
+# 赋予启动脚本可执行权限
+chmod +x start_local.sh
+# 启动交互式安装/运行向导
 ./start_local.sh
 ```
 
 也可以用语言快捷参数：
 
 ```bash
+# 本次运行强制中文提示
 ./start_local.sh --lang zh
+# 本次运行强制英文提示
 ./start_local.sh --lang en
+# 本次运行强制德文提示
 ./start_local.sh --lang de
 ```
 
@@ -121,6 +147,7 @@ VITE_API_BASE=http://localhost:8000
 启动：
 
 ```bash
+# 启动后端与前端（含检查与引导）
 ./start_local.sh
 ```
 

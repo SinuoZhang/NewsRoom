@@ -32,36 +32,62 @@ NewsRoom ist ein lokales System fuer Nachrichtenaggregation und LLM-Analyse.
 Ubuntu/Debian:
 
 ```bash
+# Paketindex aktualisieren
 sudo apt-get update
+# Git, Curl, Python- und Node.js-Werkzeuge installieren
 sudo apt-get install -y git curl python3 python3-venv python3-pip nodejs npm
 ```
 
 Fedora:
 
 ```bash
+# Basiswerkzeuge installieren
 sudo dnf install -y git curl python3 python3-virtualenv nodejs npm
 ```
 
 Arch:
 
 ```bash
+# Basiswerkzeuge installieren
 sudo pacman -S --needed git curl python nodejs npm
 ```
 
 ### 3.2 Repository klonen und starten
 
+Wenn du bereits einen GitHub-SSH-Key eingerichtet hast:
+
 ```bash
-git clone <deine-repo-url>
+# Repository per SSH klonen
+git clone git@github.com:SinuoZhang/NewsRoom.git
+# In das Projektverzeichnis wechseln
 cd NewsRoom
+# Startskript ausfuehrbar machen
 chmod +x start_local.sh
+# Gefuehrten Start ausfuehren
+./start_local.sh
+```
+
+Falls SSH noch nicht eingerichtet ist (einfacher per HTTPS):
+
+```bash
+# Repository per HTTPS klonen
+git clone https://github.com/SinuoZhang/NewsRoom.git
+# In das Projektverzeichnis wechseln
+cd NewsRoom
+# Startskript ausfuehrbar machen
+chmod +x start_local.sh
+# Gefuehrten Start ausfuehren
 ./start_local.sh
 ```
 
 Sprach-Shortcut:
 
 ```bash
+# Fuer diesen Lauf Sprache auf Deutsch setzen
 ./start_local.sh --lang de
+# Fuer diesen Lauf Sprache auf Englisch setzen
 ./start_local.sh --lang en
+# Fuer diesen Lauf Sprache auf Chinesisch setzen
 ./start_local.sh --lang zh
 ```
 
@@ -121,6 +147,7 @@ VITE_API_BASE=http://localhost:8000
 Start:
 
 ```bash
+# Backend + Frontend mit Pruefungen starten
 ./start_local.sh
 ```
 

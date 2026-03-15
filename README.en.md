@@ -40,36 +40,62 @@ NewsRoom is a local news aggregation + LLM analysis app.
 Ubuntu/Debian:
 
 ```bash
+# Update package index
 sudo apt-get update
+# Install git, curl, Python and Node.js toolchain
 sudo apt-get install -y git curl python3 python3-venv python3-pip nodejs npm
 ```
 
 Fedora:
 
 ```bash
+# Install required base tools
 sudo dnf install -y git curl python3 python3-virtualenv nodejs npm
 ```
 
 Arch:
 
 ```bash
+# Install required base tools
 sudo pacman -S --needed git curl python nodejs npm
 ```
 
 ### 3.2 Clone and run
 
+If you already use SSH keys with GitHub:
+
 ```bash
-git clone <your-repo-url>
+# Clone the repository over SSH
+git clone git@github.com:SinuoZhang/NewsRoom.git
+# Enter project directory
 cd NewsRoom
+# Ensure startup script is executable
 chmod +x start_local.sh
+# Launch guided startup
+./start_local.sh
+```
+
+If SSH is not configured yet (beginner-friendly HTTPS):
+
+```bash
+# Clone the repository over HTTPS
+git clone https://github.com/SinuoZhang/NewsRoom.git
+# Enter project directory
+cd NewsRoom
+# Ensure startup script is executable
+chmod +x start_local.sh
+# Launch guided startup
 ./start_local.sh
 ```
 
 Optional language shortcut:
 
 ```bash
+# Force English prompts for this run
 ./start_local.sh --lang en
+# Force Chinese prompts for this run
 ./start_local.sh --lang zh
+# Force German prompts for this run
 ./start_local.sh --lang de
 ```
 
@@ -131,6 +157,7 @@ VITE_API_BASE=http://localhost:8000
 Start:
 
 ```bash
+# Start backend + frontend with guided checks
 ./start_local.sh
 ```
 
