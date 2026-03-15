@@ -11,6 +11,7 @@ We formally acknowledge and thank all upstream projects and communities that sup
 
 - OpenCode / Codex is acknowledged as an engineering assistant used during parts of development and refactoring.
 - Ollama is acknowledged for local/cloud model orchestration and model serving workflows.
+- SQLite is acknowledged as the default embedded database engine used by this project.
 - We also acknowledge the maintainers of free/open model families used in this project workflow (for example, `gpt-oss`, `gemma`, and other user-selected models available through configured providers).
 
 Notes:
