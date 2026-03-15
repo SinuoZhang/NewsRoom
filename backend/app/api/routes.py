@@ -31,6 +31,7 @@ from app.schemas import (
     LlmModelsOut,
     MarketSnapshotOut,
     NewsOut,
+    OwidSeriesOut,
     SourceOut,
     TranslateIn,
     TranslateOut,
@@ -39,6 +40,7 @@ from app.services.analyzer import analyze_news
 from app.services.jobs import get_collect_status, run_collect_job
 from app.services.llm_client import chat_with_llm, get_llm_identity, list_llm_models, select_llm_model
 from app.services.market_data import get_market_snapshot
+from app.services.owid_data import get_owid_series
 
 router = APIRouter()
 CHAT_MEMORY_FILE = Path(__file__).resolve().parents[3] / "logs" / "llm_chat_memory.jsonl"
@@ -655,6 +657,20 @@ def market_finance_news(limit: int = Query(default=8, ge=1, le=20), db: Session 
         )
         for row in rows
     ]
+
+
+@router.get("/owid/series", response_model=OwidSeriesOut)
+def owid_series(
+    indicator: str = Query(..., min_length=1, description="OWID indicator slug, e.g. co2-per-capita"),
+    entity: str | None = Query(default=None, description="Filter by entity name, e.g. Germany"),
+    limit: int = Query(default=240, ge=1, le=5000),
+):
+    try:
+        return get_owid_series(indicator=indicator, entity=entity, limit=limit)
+    except requests.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"OWID upstream error: {exc}") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"OWID query failed: {exc}") from exc
 
 
 @router.post("/llm/chat", response_model=LlmChatOut)

@@ -20,6 +20,10 @@ msg() {
   esac
 }
 
+to_lower() {
+  printf "%s" "$1" | tr '[:upper:]' '[:lower:]'
+}
+
 say() {
   printf "%s\n" "$(msg "$1" "$2" "$3")"
 }
@@ -48,7 +52,7 @@ parse_args() {
 
 normalize_lang() {
   local raw="${1:-}"
-  case "${raw,,}" in
+  case "$(to_lower "$raw")" in
     zh|cn|zh-cn|chinese) printf "zh" ;;
     de|de-de|german|deutsch) printf "de" ;;
     en|en-us|english) printf "en" ;;
@@ -71,7 +75,7 @@ ask_yes_no() {
     if [ -z "$ans" ]; then
       ans="$default"
     fi
-    case "${ans,,}" in
+    case "$(to_lower "$ans")" in
       y|yes) return 0 ;;
       n|no) return 1 ;;
       *) say "请输入 y 或 n。" "Please enter y or n." "Bitte y oder n eingeben." ;;

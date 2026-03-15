@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_model: str = "gemini-1.5-flash"
     translate_api_url: str = "https://translate.argosopentech.com/translate"
+    owid_base_url: str = "https://ourworldindata.org/grapher"
 
     auto_collect_minutes: int = 10
     retention_days: int = 3

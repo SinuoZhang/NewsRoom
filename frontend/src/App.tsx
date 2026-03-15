@@ -9,6 +9,7 @@ import {
   LlmSelectNewsOut,
   MarketSnapshot,
   News,
+  OwidSeries,
   RegionCounts,
   SeedResult,
   Source,
@@ -18,7 +19,39 @@ import remarkGfm from "remark-gfm";
 import { makeNewsRef } from "./newsRef";
 
 type RegionKey = "all" | "north_america" | "europe" | "middle_east" | "greater_china" | "se_asia";
-type Lang = "zh" | "en";
+type Lang = "zh" | "en" | "de";
+type PageTab = "dashboard" | "owid";
+
+type OwidModuleSpec = {
+  indicator: string;
+  entity: string;
+  title: { zh: string; en: string };
+};
+
+type OwidModuleCard = OwidModuleSpec & {
+  series: OwidSeries;
+};
+
+const OWID_MODULE_POOL: OwidModuleSpec[] = [
+  { indicator: "co2-emissions-per-capita", entity: "Germany", title: { zh: "德国人均二氧化碳排放", en: "Germany CO2 per capita" } },
+  { indicator: "co2-emissions-per-capita", entity: "France", title: { zh: "法国人均二氧化碳排放", en: "France CO2 per capita" } },
+  { indicator: "co2-emissions-per-capita", entity: "United Kingdom", title: { zh: "英国人均二氧化碳排放", en: "UK CO2 per capita" } },
+  { indicator: "gdp-per-capita-worldbank", entity: "Germany", title: { zh: "德国人均GDP", en: "Germany GDP per capita" } },
+  { indicator: "gdp-per-capita-worldbank", entity: "France", title: { zh: "法国人均GDP", en: "France GDP per capita" } },
+  { indicator: "gdp-per-capita-worldbank", entity: "United Kingdom", title: { zh: "英国人均GDP", en: "UK GDP per capita" } },
+  { indicator: "life-expectancy", entity: "Germany", title: { zh: "德国预期寿命", en: "Germany Life expectancy" } },
+  { indicator: "life-expectancy", entity: "France", title: { zh: "法国预期寿命", en: "France Life expectancy" } },
+  { indicator: "life-expectancy", entity: "United Kingdom", title: { zh: "英国预期寿命", en: "UK Life expectancy" } },
+  { indicator: "renewable-share-energy", entity: "Germany", title: { zh: "德国可再生能源占比", en: "Germany Renewable energy share" } },
+  { indicator: "renewable-share-energy", entity: "France", title: { zh: "法国可再生能源占比", en: "France Renewable energy share" } },
+  { indicator: "renewable-share-energy", entity: "United Kingdom", title: { zh: "英国可再生能源占比", en: "UK Renewable energy share" } },
+  { indicator: "share-electricity-renewables", entity: "Germany", title: { zh: "德国可再生电力占比", en: "Germany Renewable electricity share" } },
+  { indicator: "share-electricity-renewables", entity: "France", title: { zh: "法国可再生电力占比", en: "France Renewable electricity share" } },
+  { indicator: "share-electricity-renewables", entity: "United Kingdom", title: { zh: "英国可再生电力占比", en: "UK Renewable electricity share" } },
+  { indicator: "population", entity: "Germany", title: { zh: "德国人口", en: "Germany Population" } },
+  { indicator: "population", entity: "France", title: { zh: "法国人口", en: "France Population" } },
+  { indicator: "population", entity: "United Kingdom", title: { zh: "英国人口", en: "UK Population" } },
+];
 
 const formatOptions: Intl.DateTimeFormatOptions = {
   year: "numeric",
@@ -53,6 +86,29 @@ function regionLabel(region: RegionKey, lang: Lang): string {
   if (region === "middle_east") return "Middle East";
   if (region === "greater_china") return "Greater China";
   return "Southeast Asia";
+}
+
+function pickRandomOwidSpecs(count: number): OwidModuleSpec[] {
+  const pool = [...OWID_MODULE_POOL];
+  for (let i = pool.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return pool.slice(0, Math.max(1, Math.min(count, pool.length)));
+}
+
+function buildSparklinePoints(values: number[], width = 250, height = 64): string {
+  if (values.length < 2) return "";
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min || 1;
+  return values
+    .map((v, i) => {
+      const x = (i / (values.length - 1)) * width;
+      const y = height - ((v - min) / span) * height;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
 }
 
 export function App() {
@@ -104,6 +160,11 @@ export function App() {
   const [translateMeta, setTranslateMeta] = useState<{ source: string; target: string; provider: string } | null>(null);
   const [llmDrawerOpen, setLlmDrawerOpen] = useState(false);
   const [isChatAtBottom, setIsChatAtBottom] = useState(true);
+  const [showCreditsModal, setShowCreditsModal] = useState(false);
+  const [activeTab, setActiveTab] = useState<PageTab>("dashboard");
+  const [owidCards, setOwidCards] = useState<OwidModuleCard[]>([]);
+  const [owidLoading, setOwidLoading] = useState(false);
+  const [owidError, setOwidError] = useState<string | null>(null);
   const lastCollectRunningRef = useRef(false);
   const chatLoadingRef = useRef(false);
   const llmPanelRef = useRef<HTMLElement | null>(null);
@@ -185,7 +246,7 @@ export function App() {
   useEffect(() => {
     void bootstrap();
     const saved = window.localStorage.getItem("ui_lang");
-    if (saved === "zh" || saved === "en") {
+    if (saved === "zh" || saved === "en" || saved === "de") {
       setLang(saved);
     }
   }, []);
@@ -218,6 +279,7 @@ export function App() {
     void loadLlmModels();
     void loadChatMemory();
     void refreshMarketPanel();
+    void refreshOwidModules();
 
     const marketTimer = window.setInterval(() => {
       if (!document.hidden) {
@@ -359,6 +421,24 @@ export function App() {
       setMarket(snapshot);
     } catch {
       // ignore transient market fetch failures
+    }
+  }
+
+  async function refreshOwidModules() {
+    setOwidLoading(true);
+    try {
+      setOwidError(null);
+      const picked = pickRandomOwidSpecs(8);
+      const seriesList = await Promise.all(
+        picked.map((spec) => api.getOwidSeries({ indicator: spec.indicator, entity: spec.entity, limit: 40 }))
+      );
+      const cards: OwidModuleCard[] = picked.map((spec, idx) => ({ ...spec, series: seriesList[idx] }));
+      setOwidCards(cards);
+    } catch (e) {
+      setOwidError((e as Error).message);
+      setOwidCards([]);
+    } finally {
+      setOwidLoading(false);
     }
   }
 
@@ -793,6 +873,7 @@ export function App() {
       : 0;
 
   const t = (zh: string, en: string) => (lang === "zh" ? zh : en);
+  const tr = (zh: string, en: string, de: string) => (lang === "zh" ? zh : lang === "de" ? de : en);
   const chatModeDisplay =
     chatMode === "filtered"
       ? t("当前筛选", "Current filters")
@@ -835,6 +916,54 @@ export function App() {
     [visibleNews, sourceMap, selectedNewsIdSet, toggleSelectNews, lang]
   );
 
+  const owidModules = useMemo(
+    () =>
+      owidCards.map((card, idx) => {
+        const pts = card.series.points || [];
+        const last = pts.length > 0 ? pts[pts.length - 1] : null;
+        const prev = pts.length > 1 ? pts[pts.length - 2] : null;
+        const first = pts.length > 0 ? pts[0] : null;
+        const delta = last && prev ? last.value - prev.value : null;
+        const recentValues = pts.slice(-18).map((x) => x.value);
+        const sparkline = buildSparklinePoints(recentValues);
+        return (
+          <article key={`owid-${card.indicator}-${card.entity}-${idx}`} className="owid-card">
+            <div className="owid-card-top">
+              <h4>{lang === "zh" ? card.title.zh : card.title.en}</h4>
+              <span className="owid-chip">{card.entity}</span>
+            </div>
+            <div className="owid-main-value">
+              {last ? last.value.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "-"}
+            </div>
+            <div className="owid-chart-wrap">
+              {sparkline ? (
+                <svg viewBox="0 0 250 64" className="owid-sparkline" role="img" aria-label="OWID trend">
+                  <polyline points={sparkline} fill="none" />
+                </svg>
+              ) : (
+                <div className="owid-empty-chart">{tr("数据不足，无法绘图", "Not enough points for chart", "Zu wenige Daten fuer Diagramm")}</div>
+              )}
+            </div>
+            <div className="owid-meta-row">
+              <span>{t("最近年份", "Latest year")}: {last?.year ?? "-"}</span>
+              <span>
+                {t("变化", "Delta")}: {delta === null ? "-" : `${delta >= 0 ? "+" : ""}${delta.toFixed(2)}`}
+              </span>
+            </div>
+            <div className="owid-meta-row">
+              <span>{tr("起始年份", "Start year", "Startjahr")}: {first?.year ?? "-"}</span>
+              <span>{tr("样本点", "Points", "Datenpunkte")}: {pts.length}</span>
+            </div>
+            <div className="owid-meta-row">
+              <span>{t("单位", "Unit")}: {card.series.unit || "-"}</span>
+              <a href={card.series.source_url} target="_blank" rel="noreferrer">OWID</a>
+            </div>
+          </article>
+        );
+      }),
+    [owidCards, lang]
+  );
+
   return (
     <div className="page">
       {showStartupOverlay && (
@@ -862,12 +991,28 @@ export function App() {
       )}
       <header className="hero">
         <h1>{t("NewsRoom 本地情报系统", "NewsRoom Local Intelligence")}</h1>
-        <div className="row">
-          <button onClick={() => setLang("zh")} disabled={lang === "zh"}>中文</button>
-          <button onClick={() => setLang("en")} disabled={lang === "en"}>English</button>
+        <div className="top-nav">
+          <div className="top-nav-left">
+            <button type="button" className="nav-btn" onClick={() => setActiveTab("dashboard")} disabled={activeTab === "dashboard"}>
+              {tr("总览", "Dashboard", "Uebersicht")}
+            </button>
+            <button type="button" className="nav-btn" onClick={() => setActiveTab("owid")} disabled={activeTab === "owid"}>
+              OWID Data
+            </button>
+            <button type="button" className="nav-btn" onClick={() => setShowCreditsModal(true)}>
+              {tr("制作者与致谢", "Contributors & Thanks", "Mitwirkende & Dank")}
+            </button>
+          </div>
+          <div className="top-nav-right">
+            <button className="nav-btn" onClick={() => setLang("zh")} disabled={lang === "zh"}>中文</button>
+            <button className="nav-btn" onClick={() => setLang("en")} disabled={lang === "en"}>English</button>
+            <button className="nav-btn" onClick={() => setLang("de")} disabled={lang === "de"}>Deutsch</button>
+          </div>
         </div>
       </header>
 
+      {activeTab === "dashboard" ? (
+        <>
       <section className="panel market-panel-top">
         <div className="market-header-row">
           <h2>{t("实时金融行情", "Live Market Quotes")}</h2>
@@ -894,7 +1039,7 @@ export function App() {
                 <span className="market-unit-inline">{displayMarketPrice(item).unit}</span>
               </div>
               <div className="market-sub-line">
-                来源 {item.source_url ? (
+                {tr("来源", "Source", "Quelle")} {item.source_url ? (
                   <a className="market-source-link" href={item.source_url} target="_blank" rel="noreferrer">
                     {item.source}
                   </a>
@@ -972,15 +1117,10 @@ export function App() {
       <section className="panel news-layout">
         <div className="content-grid">
           <aside className="map-panel">
-            <h3>{t("地区新闻热度（点击筛选）", "Regional News Heat (click to filter)")}</h3>
+            <h3>{t("媒体来源地区热度（点击筛选）", "Media Origin Heat (click to filter)")}</h3>
             <div className="world-map-wrap">
               <svg viewBox="0 0 800 420" className="world-map" role="img" aria-label="World map with regional news counts">
-                <rect x="0" y="0" width="800" height="420" rx="18" fill="#e8f0ec" />
-                <ellipse cx="170" cy="150" rx="120" ry="80" fill="#cadacf" />
-                <ellipse cx="340" cy="145" rx="95" ry="70" fill="#cadacf" />
-                <ellipse cx="410" cy="265" rx="70" ry="95" fill="#cadacf" />
-                <ellipse cx="560" cy="165" rx="145" ry="85" fill="#cadacf" />
-                <ellipse cx="700" cy="285" rx="75" ry="55" fill="#cadacf" />
+                <image href="/world.svg" x="0" y="0" width="800" height="420" preserveAspectRatio="xMidYMid meet" className="map-base-image" />
 
                 <g className="map-dot-group">
                   <circle className={`map-dot ${selectedRegion === "north_america" ? "active" : ""}`} cx="170" cy="145" r="28" onClick={() => setSelectedRegion("north_america")} />
@@ -1017,7 +1157,7 @@ export function App() {
               <span>{t("东南亚", "Southeast Asia")} {regionCounts.se_asia}</span>
             </div>
             <div className="map-translate-box">
-              <h4>{t("在线翻译测试", "Online Translate Test")}</h4>
+              <h4>{t("在线翻译", "Online Translate")}</h4>
               <textarea
                 className="map-translate-input"
                 value={translateInput}
@@ -1253,6 +1393,56 @@ export function App() {
           </aside>
         </div>
       </section>
+
+      </>
+      ) : (
+        <section className="panel owid-panel">
+          <div className="owid-header-row">
+            <h2>{tr("OWID 随机数据模块", "OWID Random Data Modules", "OWID Zufallsdaten-Module")}</h2>
+            <button type="button" onClick={() => void refreshOwidModules()} disabled={owidLoading}>
+              {owidLoading ? tr("抽取中...", "Refreshing...", "Aktualisiere...") : tr("随机刷新", "Refresh Random", "Zufaellig aktualisieren")}
+            </button>
+          </div>
+          <div className="meta-line">{tr("每次登录或刷新都会随机抽取若干组 OWID 指标。", "A random subset of OWID indicators is loaded on each login/refresh.", "Bei jedem Login oder Refresh wird eine zufaellige Auswahl von OWID-Indikatoren geladen.")}</div>
+          {owidError && <div className="error">{owidError}</div>}
+          <div className="owid-grid">
+            {owidModules.length > 0 ? owidModules : <div className="meta-line">{tr("暂无数据", "No data yet", "Noch keine Daten")}</div>}
+          </div>
+        </section>
+      )}
+
+      {showCreditsModal && (
+        <div className="credits-overlay" onClick={() => setShowCreditsModal(false)}>
+          <div className="credits-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="credits-header">
+              <h3>{tr("制作者与致谢", "Contributors & Thanks", "Mitwirkende & Dank")}</h3>
+              <button type="button" onClick={() => setShowCreditsModal(false)}>{tr("关闭", "Close", "Schliessen")}</button>
+            </div>
+            <div className="credits-body">
+              <p>
+                {tr("本项目主要维护者", "Primary maintainer", "Hauptverantwortlicher")}: <a href="https://github.com/SinuoZhang" target="_blank" rel="noreferrer">SinuoZhang</a>
+              </p>
+              <p>
+                {tr("项目仓库", "Repository", "Repository")}: <a href="https://github.com/SinuoZhang/NewsRoom" target="_blank" rel="noreferrer">github.com/SinuoZhang/NewsRoom</a>
+              </p>
+              <p>
+                {tr("工程协助", "Engineering assistance", "Engineering-Unterstuetzung")}: OpenCode / Codex
+              </p>
+              <div className="credits-links">
+                <a href="https://github.com/SinuoZhang/NewsRoom/blob/main/ACKNOWLEDGEMENTS.md" target="_blank" rel="noreferrer">
+                  {tr("完整致谢", "Full acknowledgements", "Vollstaendige Danksagung")}
+                </a>
+                <a href="https://github.com/SinuoZhang/NewsRoom/blob/main/THIRD_PARTY_NOTICES.md" target="_blank" rel="noreferrer">
+                  {tr("第三方许可", "Third-party licenses", "Drittanbieter-Lizenzen")}
+                </a>
+                <a href="https://simplemaps.com/resources/svg-world" target="_blank" rel="noreferrer">
+                  {tr("地图引用", "Map citation", "Kartenzitat")}
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

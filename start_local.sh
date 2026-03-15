@@ -38,6 +38,10 @@ msg() {
   esac
 }
 
+to_lower() {
+  printf "%s" "$1" | tr '[:upper:]' '[:lower:]'
+}
+
 say() {
   printf "%s\n" "$(msg "$1" "$2" "$3")"
 }
@@ -66,7 +70,7 @@ parse_args() {
 
 normalize_lang() {
   local raw="${1:-}"
-  case "${raw,,}" in
+  case "$(to_lower "$raw")" in
     zh|cn|zh-cn|chinese) printf "zh" ;;
     de|de-de|german|deutsch) printf "de" ;;
     en|en-us|english) printf "en" ;;
@@ -78,6 +82,7 @@ pick_language() {
   local normalized_arg=""
   local installed_state="false"
   local saved_lang=""
+  local env_lang=""
 
   if [ -f "$BACKEND_ENV" ] && [ -d "$ROOT_DIR/.venv" ] && [ -d "$ROOT_DIR/frontend/node_modules" ]; then
     installed_state="true"
@@ -101,6 +106,25 @@ pick_language() {
     return 0
   fi
 
+  if [ "$installed_state" = "true" ] && [ -f "$BACKEND_ENV" ]; then
+    set -a
+    # shellcheck disable=SC1090
+    source "$BACKEND_ENV"
+    set +a
+    env_lang="$(normalize_lang "${STARTUP_LANG:-}")"
+    if [ -n "$env_lang" ]; then
+      UI_LANG="$env_lang"
+      printf "%s" "$UI_LANG" > "$LANG_FILE"
+      return 0
+    fi
+  fi
+
+  if [ "$installed_state" = "true" ]; then
+    UI_LANG="zh"
+    printf "%s" "$UI_LANG" > "$LANG_FILE"
+    return 0
+  fi
+
   printf "============================================\n"
   printf " NewsRoom Startup / 启动向导 / Startassistent\n"
   printf "============================================\n"
@@ -114,6 +138,9 @@ pick_language() {
   esac
 
   printf "%s" "$UI_LANG" > "$LANG_FILE"
+  if [ -f "$BACKEND_ENV" ]; then
+    upsert_env_line "STARTUP_LANG" "$UI_LANG" "$BACKEND_ENV"
+  fi
 }
 
 ask_yes_no() {
@@ -131,7 +158,7 @@ ask_yes_no() {
     if [ -z "$ans" ]; then
       ans="$default"
     fi
-    case "${ans,,}" in
+    case "$(to_lower "$ans")" in
       y|yes) return 0 ;;
       n|no) return 1 ;;
       *) say "请输入 y 或 n。" "Please enter y or n." "Bitte y oder n eingeben." ;;
@@ -320,11 +347,11 @@ configure_runtime_if_needed() {
   if [ "$need_setup" = "true" ]; then
     say "首次安装检测到启动地址配置不完整。" "First-time setup detected incomplete runtime endpoint config." "Bei der Erstinstallation wurde eine unvollstaendige Endpunkt-Konfiguration erkannt."
     printf "%s\n" "$(msg "默认值：" "Defaults:" "Standardwerte:")"
-    printf "- BACKEND_HOST=%s\n" "$backend_host_current"
-    printf "- BACKEND_PORT=%s\n" "$backend_port_current"
-    printf "- FRONTEND_HOST=%s\n" "$frontend_host_current"
-    printf "- FRONTEND_PORT=%s\n" "$frontend_port_current"
-    printf "- VITE_API_BASE=%s\n" "$api_base_current"
+    printf -- "- BACKEND_HOST=%s\n" "$backend_host_current"
+    printf -- "- BACKEND_PORT=%s\n" "$backend_port_current"
+    printf -- "- FRONTEND_HOST=%s\n" "$frontend_host_current"
+    printf -- "- FRONTEND_PORT=%s\n" "$frontend_port_current"
+    printf -- "- VITE_API_BASE=%s\n" "$api_base_current"
     printf "\n%s\n" "$(msg "端口范围：1-65535（建议 1024 以上）。" "Port range: 1-65535 (recommend >1024)." "Port-Bereich: 1-65535 (empfohlen >1024).")"
     printf "%s\n" "$(msg "常见已占用端口示例：22(SSH), 80/443(Web), 3306(MySQL), 5432(Postgres), 6379(Redis), 8000/8080(开发服务常见)。" "Commonly occupied ports: 22(SSH), 80/443(Web), 3306(MySQL), 5432(Postgres), 6379(Redis), 8000/8080(common dev services)." "Hauefig belegte Ports: 22(SSH), 80/443(Web), 3306(MySQL), 5432(Postgres), 6379(Redis), 8000/8080(haeufige Dev-Dienste).")"
     printf "%s\n" "$(msg "输入后会自动检查端口是否已被占用。" "Entered ports will be checked for availability automatically." "Eingegebene Ports werden automatisch auf Belegung geprueft.")"
@@ -548,12 +575,12 @@ main() {
   ensure_frontend_deps
 
   printf "%s\n" "$(msg "运行地址：" "Runtime endpoints:" "Laufzeit-Endpunkte:")"
-  printf "- Backend:  http://localhost:%s\n" "$BACKEND_PORT"
-  printf "- Frontend: http://localhost:%s\n" "$FRONTEND_PORT"
-  printf "- API Base: %s\n\n" "$FRONTEND_API_BASE"
+  printf -- "- Backend:  http://localhost:%s\n" "$BACKEND_PORT"
+  printf -- "- Frontend: http://localhost:%s\n" "$FRONTEND_PORT"
+  printf -- "- API Base: %s\n\n" "$FRONTEND_API_BASE"
 
   printf "\n%s\n" "$(msg "日志文件：" "Log files:" "Logdateien:")"
-  printf "- %s\n- %s\n\n" "$CONFIG_LOG" "$RUN_LOG"
+  printf -- "- %s\n- %s\n\n" "$CONFIG_LOG" "$RUN_LOG"
 
   trap cleanup EXIT INT TERM
 

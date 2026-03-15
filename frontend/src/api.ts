@@ -233,6 +233,22 @@ export type TranslateOut = {
   provider: string;
 };
 
+export type OwidPoint = {
+  entity: string;
+  code: string | null;
+  year: number;
+  value: number;
+};
+
+export type OwidSeries = {
+  indicator: string;
+  entity: string | null;
+  source_url: string;
+  unit: string | null;
+  points: OwidPoint[];
+  fetched_at: string;
+};
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     headers: { "Content-Type": "application/json" },
@@ -299,6 +315,13 @@ export const api = {
   getLlmMemory: () => request<{ items: LlmMemoryItem[] }>("/api/llm/memory?hours=24"),
   clearLlmMemory: () => request<{ cleared: boolean }>("/api/llm/memory", { method: "DELETE" }),
   getMarketSnapshot: () => request<MarketSnapshot>("/api/market/snapshot"),
+  getOwidSeries: (params: { indicator: string; entity?: string; limit?: number }) => {
+    const query = new URLSearchParams();
+    query.set("indicator", params.indicator);
+    if (params.entity) query.set("entity", params.entity);
+    if (params.limit) query.set("limit", String(params.limit));
+    return request<OwidSeries>(`/api/owid/series?${query.toString()}`);
+  },
   translateText: (payload: TranslateIn) =>
     requestWithTimeout<TranslateOut>("/api/translate", { method: "POST", body: JSON.stringify(payload) }, 45000),
   getFinanceHeadlines: (limit = 8) => request<FinanceHeadline[]>(`/api/market/finance-news?limit=${limit}`),

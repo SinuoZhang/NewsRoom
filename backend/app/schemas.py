@@ -211,3 +211,19 @@ class TranslateOut(BaseModel):
     source_lang: str
     target_lang: str
     provider: str
+
+
+class OwidPointOut(BaseModel):
+    entity: str
+    code: str | None = None
+    year: int
+    value: float
+
+
+class OwidSeriesOut(BaseModel):
+    indicator: str
+    entity: str | None = None
+    source_url: str
+    unit: str | None = None
+    points: list[OwidPointOut]
+    fetched_at: datetime
