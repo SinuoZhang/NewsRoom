@@ -76,11 +76,26 @@ def _clean_text_for_display(value: str | None) -> str:
 
 def _region_from_source_name(name: str) -> str:
     text = (name or "").lower()
-    if "nytimes" in text or "npr" in text or "cnbc" in text or "wsj" in text:
+    if (
+        "nytimes" in text
+        or "npr" in text
+        or "cnbc" in text
+        or "wsj" in text
+        or "bloomberg" in text
+        or "marketwatch" in text
+        or "yahoo finance" in text
+        or "techcrunch" in text
+        or "the verge" in text
+        or "ars technica" in text
+        or "wired" in text
+    ):
         return "north_america"
+    if "abc australia" in text or "guardian australia" in text:
+        return "australia"
     if (
         "bbc" in text
         or "financial times" in text
+        or "ft global" in text
         or "guardian" in text
         or "economist" in text
         or "telegraph" in text
@@ -96,8 +111,29 @@ def _region_from_source_name(name: str) -> str:
         return "europe"
     if "al jazeera" in text:
         return "middle_east"
-    if "36kr" in text or "china news" in text or "hkfp" in text or "rthk" in text or "udn" in text:
+    if "africanews" in text or "allafrica" in text:
+        return "africa"
+    if (
+        "japan times" in text
+        or "nhk" in text
+        or "japan" in text
+        or "yonhap" in text
+        or "korea times" in text
+    ):
+        return "east_asia"
+    if (
+        "36kr" in text
+        or "china news" in text
+        or "hkfp" in text
+        or "rthk" in text
+        or "udn" in text
+        or "taipei times" in text
+        or "rti taiwan" in text
+        or "liberty times" in text
+    ):
         return "greater_china"
+    if "nzz" in text or "lux times" in text or "luxemburger wort" in text or "le news switzerland" in text:
+        return "neutral_zone"
     if "cna singapore" in text or "star malaysia" in text or "malay mail" in text:
         return "se_asia"
     return "other"
@@ -105,9 +141,12 @@ def _region_from_source_name(name: str) -> str:
 
 def _source_timezone_from_name(name: str) -> str:
     text = (name or "").lower()
+    if "abc australia" in text or "guardian australia" in text:
+        return "Australia/Sydney"
     if (
         "bbc" in text
         or "financial times" in text
+        or "ft global" in text
         or "guardian" in text
         or "economist" in text
         or "telegraph" in text
@@ -119,10 +158,28 @@ def _source_timezone_from_name(name: str) -> str:
         return "Europe/Berlin"
     if "france24" in text or "rfi" in text:
         return "Europe/Paris"
-    if "nytimes" in text or "npr" in text or "cnbc" in text or "wsj" in text:
+    if (
+        "nytimes" in text
+        or "npr" in text
+        or "cnbc" in text
+        or "wsj" in text
+        or "bloomberg" in text
+        or "marketwatch" in text
+        or "yahoo finance" in text
+        or "techcrunch" in text
+        or "the verge" in text
+        or "ars technica" in text
+        or "wired" in text
+    ):
         return "America/New_York"
     if "al jazeera" in text:
         return "Asia/Qatar"
+    if "africanews" in text or "allafrica" in text:
+        return "Africa/Johannesburg"
+    if "japan times" in text or "nhk" in text or "japan" in text:
+        return "Asia/Tokyo"
+    if "yonhap" in text or "korea times" in text:
+        return "Asia/Seoul"
     if "36kr" in text or "china news" in text:
         return "Asia/Shanghai"
     if "cna singapore" in text:
@@ -133,6 +190,12 @@ def _source_timezone_from_name(name: str) -> str:
         return "Asia/Hong_Kong"
     if "udn" in text:
         return "Asia/Taipei"
+    if "nzz" in text:
+        return "Europe/Zurich"
+    if "lux times" in text or "luxemburger wort" in text:
+        return "Europe/Luxembourg"
+    if "le news switzerland" in text:
+        return "Europe/Zurich"
     return "UTC"
 
 
@@ -284,12 +347,21 @@ def _apply_region_filter(query, region: str | None):
             source_name.like("%npr%"),
             source_name.like("%cnbc%"),
             source_name.like("%wsj%"),
+            source_name.like("%bloomberg%"),
+            source_name.like("%marketwatch%"),
+            source_name.like("%yahoo finance%"),
+            source_name.like("%techcrunch%"),
+            source_name.like("%the verge%"),
+            source_name.like("%ars technica%"),
+            source_name.like("%wired%"),
         )
     elif region == "europe":
         clause = or_(
             source_name.like("%bbc%"),
             source_name.like("%financial times%"),
-            source_name.like("%guardian%"),
+            source_name.like("%ft global%"),
+            source_name.like("%guardian world%"),
+            source_name.like("%guardian business%"),
             source_name.like("%economist%"),
             source_name.like("%telegraph%"),
             source_name.like("%independent%"),
@@ -303,6 +375,24 @@ def _apply_region_filter(query, region: str | None):
         )
     elif region == "middle_east":
         clause = source_name.like("%al jazeera%")
+    elif region == "australia":
+        clause = or_(
+            source_name.like("%abc australia%"),
+            source_name.like("%guardian australia%"),
+        )
+    elif region == "africa":
+        clause = or_(
+            source_name.like("%africanews%"),
+            source_name.like("%allafrica%"),
+        )
+    elif region == "east_asia":
+        clause = or_(
+            source_name.like("%japan times%"),
+            source_name.like("%nhk%"),
+            source_name.like("%japan%"),
+            source_name.like("%yonhap%"),
+            source_name.like("%korea times%"),
+        )
     elif region == "greater_china":
         clause = or_(
             source_name.like("%36kr%"),
@@ -310,6 +400,16 @@ def _apply_region_filter(query, region: str | None):
             source_name.like("%hkfp%"),
             source_name.like("%rthk%"),
             source_name.like("%udn%"),
+            source_name.like("%taipei times%"),
+            source_name.like("%rti taiwan%"),
+            source_name.like("%liberty times%"),
+        )
+    elif region == "neutral_zone":
+        clause = or_(
+            source_name.like("%nzz%"),
+            source_name.like("%lux times%"),
+            source_name.like("%luxemburger wort%"),
+            source_name.like("%le news switzerland%"),
         )
     elif region == "se_asia":
         clause = or_(
@@ -362,6 +462,14 @@ def _detect_instruction_region_hints(instruction: str) -> set[str]:
         hints.add("europe")
     if re.search(r"\b(middle\s*east|gulf|iran|israel|saudi|uae|qatar)\b|中东|海湾|伊朗|以色列|沙特|阿联酋|卡塔尔", text):
         hints.add("middle_east")
+    if re.search(r"\b(australia|oceania|sydney|melbourne)\b|澳大利亚|大洋洲|悉尼|墨尔本", text):
+        hints.add("australia")
+    if re.search(r"\b(africa|african|nigeria|kenya|south\s*africa|egypt)\b|非洲|南非|尼日利亚|肯尼亚|埃及", text):
+        hints.add("africa")
+    if re.search(r"\b(neutral|switzerland|swiss|luxembourg)\b|中立|瑞士|卢森堡", text):
+        hints.add("neutral_zone")
+    if re.search(r"\b(east\s*asia|japan|korea|south\s*korea|tokyo|seoul)\b|东亚|日本|韩国|首尔|东京", text):
+        hints.add("east_asia")
     if re.search(r"\b(us|usa|united\s*states|canada|north\s*america|fed|washington)\b|美国|加拿大|北美|美联储", text):
         hints.add("north_america")
     if re.search(r"\b(china|hong\s*kong|taiwan|greater\s*china|beijing)\b|中国|香港|台湾|大中华|北京", text):
@@ -551,17 +659,17 @@ DEFAULT_SOURCES = [
     },
     {
         "name": "DW English Top",
-        "rss_url": "https://rss.dw.com/rdf/rss-en-top",
+        "rss_url": "https://rss.dw.com/xml/rss-en-all",
         "category": "world",
     },
     {
         "name": "DW Deutsch Top",
-        "rss_url": "https://rss.dw.com/rdf/rss-de-top",
+        "rss_url": "https://rss.dw.com/xml/rss-de-all",
         "category": "regional_politics",
     },
     {
         "name": "DW Chinese",
-        "rss_url": "https://rss.dw.com/rdf/rss-chi-all",
+        "rss_url": "https://rss.dw.com/xml/rss-chi-all",
         "category": "world",
     },
     {
@@ -634,6 +742,116 @@ DEFAULT_SOURCES = [
         "rss_url": "https://udn.com/rssfeed/news/2/6638?ch=news",
         "category": "world_politics",
     },
+    {
+        "name": "Japan Times",
+        "rss_url": "https://www.japantimes.co.jp/feed/",
+        "category": "world",
+    },
+    {
+        "name": "NHK Japan News",
+        "rss_url": "https://www3.nhk.or.jp/rss/news/cat0.xml",
+        "category": "regional_politics",
+    },
+    {
+        "name": "Yonhap English",
+        "rss_url": "https://en.yna.co.kr/RSS/news.xml",
+        "category": "world",
+    },
+    {
+        "name": "Yonhap Chinese",
+        "rss_url": "https://cn.yna.co.kr/RSS/news.xml",
+        "category": "regional_politics",
+    },
+    {
+        "name": "Taipei Times",
+        "rss_url": "https://www.taipeitimes.com/xml/index.rss",
+        "category": "world",
+    },
+    {
+        "name": "RTI Taiwan Chinese",
+        "rss_url": "https://www.rti.org.tw/rss",
+        "category": "regional_politics",
+    },
+    {
+        "name": "Liberty Times World",
+        "rss_url": "https://news.ltn.com.tw/rss/world.xml",
+        "category": "regional_politics",
+    },
+    {
+        "name": "ABC Australia",
+        "rss_url": "https://www.abc.net.au/news/feed/51120/rss.xml",
+        "category": "world",
+    },
+    {
+        "name": "The Guardian Australia",
+        "rss_url": "https://www.theguardian.com/australia-news/rss",
+        "category": "regional_politics",
+    },
+    {
+        "name": "Africanews English",
+        "rss_url": "https://www.africanews.com/feed/rss",
+        "category": "world",
+    },
+    {
+        "name": "AllAfrica English",
+        "rss_url": "https://allafrica.com/tools/headlines/rdf/latest/headlines.rdf",
+        "category": "world_politics",
+    },
+    {
+        "name": "Bloomberg Markets",
+        "rss_url": "https://feeds.bloomberg.com/markets/news.rss",
+        "category": "finance",
+    },
+    {
+        "name": "MarketWatch Top Stories",
+        "rss_url": "https://feeds.content.dowjones.io/public/rss/mw_topstories",
+        "category": "finance",
+    },
+    {
+        "name": "Yahoo Finance News",
+        "rss_url": "https://finance.yahoo.com/news/rssindex",
+        "category": "finance",
+    },
+    {
+        "name": "TechCrunch",
+        "rss_url": "https://techcrunch.com/feed/",
+        "category": "technology",
+    },
+    {
+        "name": "The Verge",
+        "rss_url": "https://www.theverge.com/rss/index.xml",
+        "category": "technology",
+    },
+    {
+        "name": "Ars Technica",
+        "rss_url": "http://feeds.arstechnica.com/arstechnica/index",
+        "category": "technology",
+    },
+    {
+        "name": "WIRED",
+        "rss_url": "https://www.wired.com/feed/rss",
+        "category": "technology",
+    },
+    {
+        "name": "NZZ",
+        "rss_url": "https://www.nzz.ch/startseite.rss",
+        "category": "world_politics",
+    },
+    {
+        "name": "Lux Times",
+        "rss_url": "https://www.luxtimes.lu/en/rss",
+        "category": "world",
+    },
+    {
+        "name": "Luxemburger Wort",
+        "rss_url": "https://www.wort.lu/de/rss",
+        "category": "regional_politics",
+    },
+    {
+        "name": "Le News Switzerland",
+        "rss_url": "https://lenews.ch/feed/",
+        "category": "world",
+    },
 ]
 
 
@@ -657,6 +875,16 @@ def translate_text(payload: TranslateIn):
             return "en"
         if value.startswith("zh"):
             return "zh-CN" if for_mymemory else "zh"
+        if value.startswith("ja"):
+            return "ja"
+        if value.startswith("ko"):
+            return "ko"
+        if value.startswith("ar"):
+            return "ar"
+        if value.startswith("fr"):
+            return "fr"
+        if value.startswith("es"):
+            return "es"
         if value.startswith("de"):
             return "de"
         if value.startswith("en"):
@@ -666,6 +894,16 @@ def translate_text(payload: TranslateIn):
     def _guess_source_lang(input_text: str) -> str:
         if re.search(r"[\u4e00-\u9fff]", input_text):
             return "zh"
+        if re.search(r"[\u3040-\u30ff\u31f0-\u31ff]", input_text):
+            return "ja"
+        if re.search(r"[\uac00-\ud7af]", input_text):
+            return "ko"
+        if re.search(r"[\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff]", input_text):
+            return "ar"
+        if re.search(r"[àâæçéèêëîïôœùûüÿÀÂÆÇÉÈÊËÎÏÔŒÙÛÜŸ]", input_text):
+            return "fr"
+        if re.search(r"[ñáéíóúüÑÁÉÍÓÚÜ]", input_text):
+            return "es"
         if re.search(r"[äöüßÄÖÜ]", input_text):
             return "de"
         return "en"
@@ -1474,6 +1712,10 @@ def region_counts(db: Session = Depends(get_db)):
         "north_america": 0,
         "europe": 0,
         "middle_east": 0,
+        "australia": 0,
+        "africa": 0,
+        "neutral_zone": 0,
+        "east_asia": 0,
         "greater_china": 0,
         "se_asia": 0,
         "other": 0,

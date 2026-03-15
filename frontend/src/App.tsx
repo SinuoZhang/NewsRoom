@@ -21,7 +21,7 @@ import Plotly from "plotly.js-basic-dist-min";
 
 const Plot = createPlotlyComponent(Plotly as never);
 
-type RegionKey = "all" | "north_america" | "europe" | "middle_east" | "greater_china" | "se_asia";
+type RegionKey = "all" | "north_america" | "europe" | "middle_east" | "australia" | "africa" | "neutral_zone" | "east_asia" | "greater_china" | "se_asia";
 type Lang = "zh" | "en" | "de";
 type PageTab = "dashboard" | "owid" | "stats";
 type RegionBucketKey = Exclude<RegionKey, "all"> | "other";
@@ -71,31 +71,90 @@ function toUtcDate(value: string | null): Date | null {
   return dt;
 }
 
-function regionLabel(region: RegionKey, lang: Lang): string {
+function regionLabel(region: RegionKey | RegionBucketKey, lang: Lang): string {
   if (lang === "zh") {
     if (region === "all") return "全部";
     if (region === "north_america") return "北美";
     if (region === "europe") return "欧洲";
     if (region === "middle_east") return "中东";
+    if (region === "australia") return "澳洲";
+    if (region === "africa") return "非洲";
+    if (region === "neutral_zone") return "中立区";
+    if (region === "east_asia") return "东亚";
     if (region === "greater_china") return "大中华";
-    return "东南亚";
+    if (region === "se_asia") return "东南亚";
+    return "其他";
   }
   if (region === "all") return "All";
   if (region === "north_america") return "North America";
   if (region === "europe") return "Europe";
   if (region === "middle_east") return "Middle East";
+  if (region === "australia") return "Australia";
+  if (region === "africa") return "Africa";
+  if (region === "neutral_zone") return "Neutral Zone";
+  if (region === "east_asia") return "East Asia";
   if (region === "greater_china") return "Greater China";
-  return "Southeast Asia";
+  if (region === "se_asia") return "Southeast Asia";
+  return "Other";
 }
 
 function inferRegionFromSourceName(sourceName: string): RegionBucketKey {
   const text = (sourceName || "").toLowerCase();
-  if (/(nytimes|npr|cnbc|wsj|wall street journal)/.test(text)) return "north_america";
-  if (/(bbc|financial times|guardian|economist|telegraph|independent|reuters|dw|spiegel|tagesschau|france24|rfi)/.test(text)) return "europe";
+  if (/(nytimes|npr|cnbc|wsj|wall street journal|bloomberg|marketwatch|yahoo finance|techcrunch|the verge|ars technica|wired)/.test(text)) return "north_america";
+  if (/(abc australia|guardian australia)/.test(text)) return "australia";
+  if (/(bbc|financial times|ft global|guardian|economist|telegraph|independent|reuters|dw|spiegel|tagesschau|france24|rfi)/.test(text)) return "europe";
   if (/(al jazeera|middle east eye|haaretz)/.test(text)) return "middle_east";
-  if (/(xinhua|people|caixin|36kr|ifeng|bbc chinese|dw chinese|sina|netease|chinanews)/.test(text)) return "greater_china";
-  if (/(straits times|cna singapore|jakarta post|bangkok post)/.test(text)) return "se_asia";
+  if (/(africanews|allafrica)/.test(text)) return "africa";
+  if (/(nzz|lux times|luxemburger wort|le news switzerland)/.test(text)) return "neutral_zone";
+  if (/(japan times|nhk|japan|yonhap|korea times)/.test(text)) return "east_asia";
+  if (/(xinhua|people|caixin|36kr|ifeng|bbc chinese|dw chinese|sina|netease|chinanews|udn|hkfp|rthk|taipei times|rti taiwan|liberty times)/.test(text)) return "greater_china";
+  if (/(straits times|cna singapore|jakarta post|bangkok post|star malaysia|malay mail)/.test(text)) return "se_asia";
   return "other";
+}
+
+function inferCountryFromSourceName(sourceName: string): string {
+  const text = (sourceName || "").toLowerCase();
+  if (/(nytimes|npr|cnbc|wsj|wall street journal|bloomberg|marketwatch|yahoo finance|techcrunch|the verge|ars technica|wired)/.test(text)) return "us";
+  if (/(abc australia|guardian australia)/.test(text)) return "australia";
+  if (/(bbc|financial times|ft global|guardian|economist|telegraph|independent|reuters)/.test(text)) return "uk";
+  if (/(dw|spiegel|tagesschau)/.test(text)) return "germany";
+  if (/(france24|rfi)/.test(text)) return "france";
+  if (/(al jazeera)/.test(text)) return "qatar";
+  if (/(japan times|nhk)/.test(text)) return "japan";
+  if (/(yonhap|korea times)/.test(text)) return "south_korea";
+  if (/(taipei times|rti taiwan|liberty times|udn)/.test(text)) return "taiwan";
+  if (/(36kr|china news)/.test(text)) return "china";
+  if (/(hkfp|rthk)/.test(text)) return "hong_kong";
+  if (/(cna singapore)/.test(text)) return "singapore";
+  if (/(star malaysia|malay mail)/.test(text)) return "malaysia";
+  if (/(africanews|allafrica)/.test(text)) return "africa";
+  if (/(nzz|le news switzerland)/.test(text)) return "switzerland";
+  if (/(lux times|luxemburger wort)/.test(text)) return "luxembourg";
+  return "global";
+}
+
+function countryLabel(country: string, lang: Lang): string {
+  const labels: Record<string, { zh: string; en: string }> = {
+    us: { zh: "美国", en: "United States" },
+    uk: { zh: "英国", en: "United Kingdom" },
+    germany: { zh: "德国", en: "Germany" },
+    france: { zh: "法国", en: "France" },
+    qatar: { zh: "卡塔尔", en: "Qatar" },
+    japan: { zh: "日本", en: "Japan" },
+    south_korea: { zh: "韩国", en: "South Korea" },
+    taiwan: { zh: "台湾", en: "Taiwan" },
+    china: { zh: "中国", en: "China" },
+    hong_kong: { zh: "香港", en: "Hong Kong" },
+    singapore: { zh: "新加坡", en: "Singapore" },
+    malaysia: { zh: "马来西亚", en: "Malaysia" },
+    australia: { zh: "澳大利亚", en: "Australia" },
+    africa: { zh: "非洲", en: "Africa" },
+    switzerland: { zh: "瑞士", en: "Switzerland" },
+    luxembourg: { zh: "卢森堡", en: "Luxembourg" },
+    global: { zh: "全球", en: "Global" },
+  };
+  const hit = labels[country] || labels.global;
+  return lang === "zh" ? hit.zh : hit.en;
 }
 
 function normalizeSelectedIds(ids: number[]): number[] {
@@ -144,6 +203,9 @@ export function App() {
   const [news, setNews] = useState<News[]>([]);
   const [q, setQ] = useState("");
   const [sourceId, setSourceId] = useState<number | "">("");
+  const [sourceMenuOpen, setSourceMenuOpen] = useState(false);
+  const [sourceCanScrollLeft, setSourceCanScrollLeft] = useState(false);
+  const [sourceCanScrollRight, setSourceCanScrollRight] = useState(false);
   const [loading, setLoading] = useState(false);
   const [checkingUpdates, setCheckingUpdates] = useState(false);
   const [autoCollecting, setAutoCollecting] = useState(false);
@@ -159,6 +221,10 @@ export function App() {
     north_america: 0,
     europe: 0,
     middle_east: 0,
+    australia: 0,
+    africa: 0,
+    neutral_zone: 0,
+    east_asia: 0,
     greater_china: 0,
     se_asia: 0,
     other: 0,
@@ -190,8 +256,8 @@ export function App() {
   const [marketRange, setMarketRange] = useState<MarketRange>("1h");
   const [metalUnitMode, setMetalUnitMode] = useState<"usd_imperial" | "eur_metric">("usd_imperial");
   const [translateInput, setTranslateInput] = useState("");
-  const [translateTarget, setTranslateTarget] = useState<"zh" | "en" | "de">("en");
-  const [translateSource, setTranslateSource] = useState<"auto" | "zh" | "en" | "de">("auto");
+  const [translateTarget, setTranslateTarget] = useState<"zh" | "en" | "de" | "ja" | "ko" | "ar" | "fr" | "es">("en");
+  const [translateSource, setTranslateSource] = useState<"auto" | "zh" | "en" | "de" | "ja" | "ko" | "ar" | "fr" | "es">("auto");
   const [translateLoading, setTranslateLoading] = useState(false);
   const [translateOutput, setTranslateOutput] = useState("");
   const [translateMeta, setTranslateMeta] = useState<{ source: string; target: string; provider: string } | null>(null);
@@ -206,8 +272,12 @@ export function App() {
   const [newsRefreshNotice, setNewsRefreshNotice] = useState<string | null>(null);
   const [refreshStats, setRefreshStats] = useState<RefreshStat[]>([]);
   const lastCollectRunningRef = useRef(false);
+  const collectStatusHydratedRef = useRef(false);
+  const postBootInitRef = useRef(false);
   const chatLoadingRef = useRef(false);
   const llmPanelRef = useRef<HTMLElement | null>(null);
+  const sourceMenuRef = useRef<HTMLDivElement | null>(null);
+  const sourceMenuColumnsRef = useRef<HTMLDivElement | null>(null);
   const chatBoxRef = useRef<HTMLDivElement | null>(null);
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
   const newsColumnRef = useRef<HTMLDivElement | null>(null);
@@ -220,6 +290,67 @@ export function App() {
     return m;
   }, [sources]);
 
+  const selectedSourceName = useMemo(() => {
+    if (sourceId === "") return "";
+    return sources.find((s) => s.id === sourceId)?.name || "";
+  }, [sources, sourceId]);
+
+  const sourceMenuColumns = useMemo(() => {
+    const regionOrder: RegionBucketKey[] = [
+      "north_america",
+      "europe",
+      "middle_east",
+      "africa",
+      "australia",
+      "east_asia",
+      "greater_china",
+      "se_asia",
+      "neutral_zone",
+    ];
+
+    const columns = regionOrder
+      .map((region) => {
+        const regionSources = sources.filter((s) => inferRegionFromSourceName(s.name) === region);
+        if (!regionSources.length) return null;
+
+        const countryMap = new Map<string, Source[]>();
+        regionSources.forEach((s) => {
+          const country = inferCountryFromSourceName(s.name);
+          const rows = countryMap.get(country) || [];
+          rows.push(s);
+          countryMap.set(country, rows);
+        });
+
+        const countries = Array.from(countryMap.entries())
+          .sort((a, b) => countryLabel(a[0], lang).localeCompare(countryLabel(b[0], lang)))
+          .map(([country, rows]) => ({
+            country,
+            label: countryLabel(country, lang),
+            sources: rows.sort((a, b) => a.name.localeCompare(b.name)),
+          }));
+
+        const normalizedCountries =
+          region === "se_asia"
+            ? [
+                {
+                  country: "se_asia",
+                  label: regionLabel("se_asia", lang),
+                  sources: countries.flatMap((x) => x.sources).sort((a, b) => a.name.localeCompare(b.name)),
+                },
+              ]
+            : countries;
+
+        return {
+          region,
+          label: regionLabel(region as RegionKey, lang),
+          countries: normalizedCountries,
+        };
+      })
+      .filter((x): x is { region: RegionBucketKey; label: string; countries: Array<{ country: string; label: string; sources: Source[] }> } => Boolean(x));
+
+    return columns;
+  }, [sources, lang]);
+
   const visibleNews = useMemo(() => {
     if (!showSelectedOnly) return news;
     return selectedOnlyNews;
@@ -231,6 +362,48 @@ export function App() {
       setSelectedOnlyNews([]);
     }
   }, [showSelectedOnly, selectedNewsIds.length]);
+
+  useEffect(() => {
+    if (!sourceMenuOpen) return;
+    const onMouseDown = (evt: MouseEvent) => {
+      if (!sourceMenuRef.current) return;
+      const target = evt.target as Node | null;
+      if (target && !sourceMenuRef.current.contains(target)) {
+        setSourceMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onMouseDown);
+    return () => document.removeEventListener("mousedown", onMouseDown);
+  }, [sourceMenuOpen]);
+
+  const updateSourceMenuScrollState = useCallback(() => {
+    const cols = sourceMenuColumnsRef.current;
+    if (!cols) {
+      setSourceCanScrollLeft(false);
+      setSourceCanScrollRight(false);
+      return;
+    }
+    const maxLeft = Math.max(0, cols.scrollWidth - cols.clientWidth);
+    setSourceCanScrollLeft(cols.scrollLeft > 4);
+    setSourceCanScrollRight(cols.scrollLeft < maxLeft - 4);
+  }, []);
+
+  useEffect(() => {
+    if (!sourceMenuOpen) return;
+    updateSourceMenuScrollState();
+    window.addEventListener("resize", updateSourceMenuScrollState);
+    return () => window.removeEventListener("resize", updateSourceMenuScrollState);
+  }, [sourceMenuOpen, sourceMenuColumns.length, updateSourceMenuScrollState]);
+
+  const scrollSourceColumns = useCallback((direction: "left" | "right") => {
+    const cols = sourceMenuColumnsRef.current;
+    if (!cols) return;
+    const firstCol = cols.querySelector<HTMLElement>(".source-col");
+    const step = (firstCol?.offsetWidth || 220) + 10;
+    const delta = direction === "left" ? -step : step;
+    cols.scrollBy({ left: delta, behavior: "smooth" });
+    window.setTimeout(updateSourceMenuScrollState, 220);
+  }, [updateSourceMenuScrollState]);
 
   useEffect(() => {
     if (!showSelectedOnly) return;
@@ -351,10 +524,6 @@ export function App() {
   }, [chatLoading]);
 
   useEffect(() => {
-    void refreshCollectStatus();
-  }, []);
-
-  useEffect(() => {
     if (lang === "en") return;
     if (owidCards.length === 0) return;
 
@@ -384,18 +553,29 @@ export function App() {
   }, [lang, owidCards, owidTitleTranslations]);
 
   useEffect(() => {
-    void loadLlmModels();
-    void loadChatMemory();
-    void refreshMarketPanel();
-    void refreshOwidModules();
+    if (booting || postBootInitRef.current) return;
+    postBootInitRef.current = true;
 
-    const marketTimer = window.setInterval(() => {
-      if (!document.hidden) {
-        void refreshMarketPanel();
-      }
-    }, 60000);
-    return () => window.clearInterval(marketTimer);
-  }, []);
+    let marketTimer = 0;
+    const delayed = window.setTimeout(() => {
+      void loadLlmModels();
+      void loadChatMemory();
+      void refreshMarketPanel();
+      void refreshOwidModules();
+      void refreshCollectStatus();
+
+      marketTimer = window.setInterval(() => {
+        if (!document.hidden) {
+          void refreshMarketPanel();
+        }
+      }, 60000);
+    }, 180);
+
+    return () => {
+      window.clearTimeout(delayed);
+      if (marketTimer) window.clearInterval(marketTimer);
+    };
+  }, [booting]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -405,22 +585,82 @@ export function App() {
   }, [booting, autoCollecting, q, sourceId, selectedRegion, news.length]);
 
   useEffect(() => {
+    if (booting) return;
+    const intervalMs = collectStatus?.running ? 900 : 5000;
+    const timer = window.setInterval(() => {
+      if (!document.hidden || collectStatus?.running) {
+        void refreshCollectStatus();
+      }
+    }, intervalMs);
+    return () => window.clearInterval(timer);
+  }, [booting, collectStatus?.running]);
+
+  useEffect(() => {
     if (sources.length === 0) return;
     void onSearch();
   }, [selectedRegion]);
 
   async function bootstrap() {
+    let bootstrapError = "";
     try {
       setError(null);
-      const seed = await api.seedSources();
-      const [srcs] = await Promise.all([api.getSources()]);
-      setSeedResult(seed);
+      let srcs: Source[] = [];
+
+      try {
+        srcs = await api.getSources();
+      } catch (e) {
+        bootstrapError = (e as Error).message;
+      }
+
+      if (srcs.length === 0) {
+        try {
+          const seed = await api.seedSources();
+          setSeedResult(seed);
+          srcs = await api.getSources();
+        } catch (e) {
+          bootstrapError = bootstrapError || (e as Error).message;
+        }
+      }
+
       setSources(srcs);
-      await refreshNewsView();
-      await refreshCollectStatus();
+
+      try {
+        const region = selectedRegion === "all" ? undefined : selectedRegion;
+        const rows = await api.getNews({
+          q: q || undefined,
+          source_id: sourceId === "" ? undefined : sourceId,
+          region,
+          limit: 120,
+        });
+        setNews(rows);
+        setTotalCount(rows.length);
+      } catch (e) {
+        bootstrapError = bootstrapError || (e as Error).message;
+      }
+
+      setBooting(false);
+
+      void (async () => {
+        try {
+          const region = selectedRegion === "all" ? undefined : selectedRegion;
+          const [count, mapCounts] = await Promise.all([
+            api.getNewsCount({ q: q || undefined, source_id: sourceId === "" ? undefined : sourceId, region }),
+            api.getRegionCounts(),
+          ]);
+          setTotalCount(count.total);
+          setRegionCounts(mapCounts);
+        } catch {
+          // keep current values when meta refresh fails
+        }
+      })();
+
+      void refreshCollectStatus();
+
+      if (bootstrapError) {
+        setError(bootstrapError);
+      }
     } catch (e) {
       setError((e as Error).message);
-    } finally {
       setBooting(false);
     }
   }
@@ -446,7 +686,7 @@ export function App() {
     const region = selectedRegion === "all" ? undefined : selectedRegion;
     const maxId = news.length > 0 ? Math.max(...news.map((n) => n.id)) : undefined;
     if (!maxId) {
-      return { added: 0, byRegion: { north_america: 0, europe: 0, middle_east: 0, greater_china: 0, se_asia: 0, other: 0 } as Record<RegionBucketKey, number> };
+      return { added: 0, byRegion: { north_america: 0, europe: 0, middle_east: 0, australia: 0, africa: 0, neutral_zone: 0, east_asia: 0, greater_china: 0, se_asia: 0, other: 0 } as Record<RegionBucketKey, number> };
     }
 
     const rows = await api.getNews({
@@ -458,7 +698,7 @@ export function App() {
     });
 
     if (!rows.length) {
-      return { added: 0, byRegion: { north_america: 0, europe: 0, middle_east: 0, greater_china: 0, se_asia: 0, other: 0 } as Record<RegionBucketKey, number> };
+      return { added: 0, byRegion: { north_america: 0, europe: 0, middle_east: 0, australia: 0, africa: 0, neutral_zone: 0, east_asia: 0, greater_china: 0, se_asia: 0, other: 0 } as Record<RegionBucketKey, number> };
     }
 
     let added = 0;
@@ -480,7 +720,7 @@ export function App() {
     } catch {
       // ignore
     }
-    const byRegion = { north_america: 0, europe: 0, middle_east: 0, greater_china: 0, se_asia: 0, other: 0 } as Record<RegionBucketKey, number>;
+    const byRegion = { north_america: 0, europe: 0, middle_east: 0, australia: 0, africa: 0, neutral_zone: 0, east_asia: 0, greater_china: 0, se_asia: 0, other: 0 } as Record<RegionBucketKey, number>;
     addedRows.forEach((row) => {
       byRegion[inferRegionFromSourceName(row.source_name)] += 1;
     });
@@ -504,7 +744,7 @@ export function App() {
       source_done: collectStatus?.source_done ?? null,
       source_total: collectStatus?.source_total ?? null,
       current_source: collectStatus?.current_source ?? null,
-      added_by_region: byRegion || { north_america: 0, europe: 0, middle_east: 0, greater_china: 0, se_asia: 0, other: 0 },
+      added_by_region: byRegion || { north_america: 0, europe: 0, middle_east: 0, australia: 0, africa: 0, neutral_zone: 0, east_asia: 0, greater_china: 0, se_asia: 0, other: 0 },
     };
     setRefreshStats((prev) => [row, ...prev].slice(0, 500));
   }
@@ -566,6 +806,12 @@ export function App() {
       if (!status.running && status.last_result) {
         setCollectResult(status.last_result);
       }
+      if (!collectStatusHydratedRef.current) {
+        collectStatusHydratedRef.current = true;
+        lastCollectRunningRef.current = status.running;
+        return;
+      }
+
       if (lastCollectRunningRef.current && !status.running) {
         const result = await refreshNewsIncremental();
         const added = result.added;
@@ -718,6 +964,7 @@ export function App() {
 
   async function onCollect() {
     setLoading(true);
+    void refreshCollectStatus();
     try {
       setError(null);
       const collect = await api.collectNews();
@@ -1215,7 +1462,7 @@ export function App() {
     collectStatus && collectStatus.source_total > 0
       ? Math.min(100, Math.round((collectStatus.source_done / collectStatus.source_total) * 100))
       : 0;
-  const newsMapBusy = Boolean(collectStatus?.running) || checkingUpdates || loading;
+  const newsMapBusy = checkingUpdates || loading;
 
   const t = (zh: string, en: string) => (lang === "zh" ? zh : en);
   const tr = (zh: string, en: string, de: string) => (lang === "zh" ? zh : lang === "de" ? de : en);
@@ -1378,9 +1625,12 @@ export function App() {
       { key: "north_america", label: tr("北美", "North America", "Nordamerika"), value: regionCounts.north_america },
       { key: "europe", label: tr("欧洲", "Europe", "Europa"), value: regionCounts.europe },
       { key: "middle_east", label: tr("中东", "Middle East", "Naher Osten"), value: regionCounts.middle_east },
+      { key: "australia", label: tr("澳洲", "Australia", "Australien"), value: regionCounts.australia },
+      { key: "africa", label: tr("非洲", "Africa", "Afrika"), value: regionCounts.africa },
+      { key: "neutral_zone", label: tr("中立区", "Neutral Zone", "Neutrale Zone"), value: regionCounts.neutral_zone },
+      { key: "east_asia", label: tr("东亚", "East Asia", "Ostasien"), value: regionCounts.east_asia },
       { key: "greater_china", label: tr("大中华", "Greater China", "Grosschina"), value: regionCounts.greater_china },
       { key: "se_asia", label: tr("东南亚", "Southeast Asia", "Suedostasien"), value: regionCounts.se_asia },
-      { key: "other", label: tr("其他", "Other", "Sonstige"), value: regionCounts.other },
     ],
     [regionCounts, lang]
   );
@@ -1390,6 +1640,10 @@ export function App() {
       north_america: 0,
       europe: 0,
       middle_east: 0,
+      australia: 0,
+      africa: 0,
+      neutral_zone: 0,
+      east_asia: 0,
       greater_china: 0,
       se_asia: 0,
       other: 0,
@@ -1398,6 +1652,10 @@ export function App() {
       totals.north_america += r.added_by_region?.north_america || 0;
       totals.europe += r.added_by_region?.europe || 0;
       totals.middle_east += r.added_by_region?.middle_east || 0;
+      totals.australia += r.added_by_region?.australia || 0;
+      totals.africa += r.added_by_region?.africa || 0;
+      totals.neutral_zone += r.added_by_region?.neutral_zone || 0;
+      totals.east_asia += r.added_by_region?.east_asia || 0;
       totals.greater_china += r.added_by_region?.greater_china || 0;
       totals.se_asia += r.added_by_region?.se_asia || 0;
       totals.other += r.added_by_region?.other || 0;
@@ -1406,9 +1664,12 @@ export function App() {
       { label: tr("北美", "North America", "Nordamerika"), value: totals.north_america },
       { label: tr("欧洲", "Europe", "Europa"), value: totals.europe },
       { label: tr("中东", "Middle East", "Naher Osten"), value: totals.middle_east },
+      { label: tr("澳洲", "Australia", "Australien"), value: totals.australia },
+      { label: tr("非洲", "Africa", "Afrika"), value: totals.africa },
+      { label: tr("中立区", "Neutral Zone", "Neutrale Zone"), value: totals.neutral_zone },
+      { label: tr("东亚", "East Asia", "Ostasien"), value: totals.east_asia },
       { label: tr("大中华", "Greater China", "Grosschina"), value: totals.greater_china },
       { label: tr("东南亚", "Southeast Asia", "Suedostasien"), value: totals.se_asia },
-      { label: tr("其他", "Other", "Sonstige"), value: totals.other },
     ];
   }, [refreshStats, lang]);
 
@@ -1529,17 +1790,82 @@ export function App() {
               placeholder={t("关键词搜索", "Keyword search")}
               onChange={(e) => setQ(e.target.value)}
             />
-            <select
-              value={sourceId}
-              onChange={(e) => setSourceId(e.target.value ? Number(e.target.value) : "")}
-            >
-              <option value="">{t("全部来源", "All Sources")}</option>
-              {sources.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
+            <div className="source-menu" ref={sourceMenuRef}>
+              <button
+                type="button"
+                className={`source-menu-trigger ${sourceMenuOpen ? "open" : ""}`}
+                onClick={() => setSourceMenuOpen((v) => !v)}
+                aria-expanded={sourceMenuOpen}
+              >
+                <span className="source-menu-trigger-left">
+                  <span className="source-menu-icon" aria-hidden="true">☰</span>
+                  <span className="source-menu-title-wrap">
+                    <span className="source-menu-title">{t("选择媒体", "Choose Media")}</span>
+                    <span className="source-menu-current">{selectedSourceName || t("全部来源", "All Sources")}</span>
+                  </span>
+                </span>
+                <span className={`source-menu-caret ${sourceMenuOpen ? "open" : ""}`} aria-hidden="true">▾</span>
+              </button>
+              {sourceMenuOpen && (
+                <div className="source-menu-panel">
+                  <button
+                    type="button"
+                    className={`source-menu-item all ${sourceId === "" ? "active" : ""}`}
+                    onClick={() => {
+                      setSourceId("");
+                      setSourceMenuOpen(false);
+                    }}
+                  >
+                    {t("全部来源", "All Sources")}
+                  </button>
+                  <div className="source-menu-carousel">
+                    <button
+                      type="button"
+                      className="source-menu-arrow"
+                      disabled={!sourceCanScrollLeft}
+                      onClick={() => scrollSourceColumns("left")}
+                      aria-label={t("向左查看", "Scroll left")}
+                    >
+                      ‹
+                    </button>
+                    <div ref={sourceMenuColumnsRef} className="source-menu-columns" onScroll={updateSourceMenuScrollState}>
+                      {sourceMenuColumns.map((col) => (
+                        <section key={col.region} className="source-col">
+                          <h4>{col.label}</h4>
+                        {col.countries.map((country) => (
+                          <div key={`${col.region}-${country.country}`} className="source-country-group">
+                              {country.label !== col.label && <div className="source-country-title">{country.label}</div>}
+                              {country.sources.map((s) => (
+                                <button
+                                  key={s.id}
+                                  type="button"
+                                  className={`source-menu-item ${sourceId === s.id ? "active" : ""}`}
+                                  onClick={() => {
+                                    setSourceId(s.id);
+                                    setSourceMenuOpen(false);
+                                  }}
+                                >
+                                  {s.name}
+                                </button>
+                              ))}
+                            </div>
+                          ))}
+                        </section>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      className="source-menu-arrow"
+                      disabled={!sourceCanScrollRight}
+                      onClick={() => scrollSourceColumns("right")}
+                      aria-label={t("向右查看", "Scroll right")}
+                    >
+                      ›
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
             <button onClick={onSearch} disabled={loading}>
               {t("搜索", "Search")}
             </button>
@@ -1550,17 +1876,6 @@ export function App() {
           </div>
 
         </div>
-        {collectStatus && (
-          <div className="control-progress-full">
-            <div className="control-progress-label">
-              <span>{t("抓取进度", "Collect Progress")}</span>
-              <span>{collectProgressPercent}%</span>
-            </div>
-            <div className="progress-track full">
-              <div className="progress-bar" style={{ width: `${collectProgressPercent}%` }} />
-            </div>
-          </div>
-        )}
         {error && <div className="error">{error}</div>}
       </section>
 
@@ -1589,6 +1904,26 @@ export function App() {
                 </g>
 
                 <g className="map-dot-group">
+                  <circle className={`map-dot ${selectedRegion === "africa" ? "active" : ""}`} cx="390" cy="235" r="24" onClick={() => setSelectedRegion("africa")} />
+                  <text x="390" y="240" textAnchor="middle" className="dot-label">{regionCounts.africa}</text>
+                </g>
+
+                <g className="map-dot-group">
+                  <circle className={`map-dot ${selectedRegion === "australia" ? "active" : ""}`} cx="700" cy="300" r="24" onClick={() => setSelectedRegion("australia")} />
+                  <text x="700" y="305" textAnchor="middle" className="dot-label">{regionCounts.australia}</text>
+                </g>
+
+                <g className="map-dot-group">
+                  <circle className={`map-dot ${selectedRegion === "neutral_zone" ? "active" : ""}`} cx="405" cy="110" r="18" onClick={() => setSelectedRegion("neutral_zone")} />
+                  <text x="405" y="114" textAnchor="middle" className="dot-label">{regionCounts.neutral_zone}</text>
+                </g>
+
+                <g className="map-dot-group">
+                  <circle className={`map-dot ${selectedRegion === "east_asia" ? "active" : ""}`} cx="645" cy="145" r="24" onClick={() => setSelectedRegion("east_asia")} />
+                  <text x="645" y="150" textAnchor="middle" className="dot-label">{regionCounts.east_asia}</text>
+                </g>
+
+                <g className="map-dot-group">
                   <circle className={`map-dot ${selectedRegion === "greater_china" ? "active" : ""}`} cx="610" cy="165" r="28" onClick={() => setSelectedRegion("greater_china")} />
                   <text x="610" y="170" textAnchor="middle" className="dot-label">{regionCounts.greater_china}</text>
                 </g>
@@ -1604,6 +1939,10 @@ export function App() {
               <span>{t("北美", "North America")} {regionCounts.north_america}</span>
               <span>{t("欧洲", "Europe")} {regionCounts.europe}</span>
               <span>{t("中东", "Middle East")} {regionCounts.middle_east}</span>
+              <span>{t("非洲", "Africa")} {regionCounts.africa}</span>
+              <span>{t("澳洲", "Australia")} {regionCounts.australia}</span>
+              <span>{t("中立区", "Neutral Zone")} {regionCounts.neutral_zone}</span>
+              <span>{t("东亚", "East Asia")} {regionCounts.east_asia}</span>
               <span>{t("大中华", "Greater China")} {regionCounts.greater_china}</span>
               <span>{t("东南亚", "Southeast Asia")} {regionCounts.se_asia}</span>
             </div>
@@ -1617,16 +1956,26 @@ export function App() {
                 rows={4}
               />
               <div className="row">
-                <select value={translateSource} onChange={(e) => setTranslateSource(e.target.value as "auto" | "zh" | "en" | "de") }>
+                <select value={translateSource} onChange={(e) => setTranslateSource(e.target.value as "auto" | "zh" | "en" | "de" | "ja" | "ko" | "ar" | "fr" | "es") }>
                   <option value="auto">{t("自动检测", "Auto detect")}</option>
                   <option value="zh">中文</option>
                   <option value="en">English</option>
                   <option value="de">Deutsch</option>
+                  <option value="ja">日本語</option>
+                  <option value="ko">한국어</option>
+                  <option value="ar">العربية</option>
+                  <option value="fr">Français</option>
+                  <option value="es">Español</option>
                 </select>
-                <select value={translateTarget} onChange={(e) => setTranslateTarget(e.target.value as "zh" | "en" | "de") }>
+                <select value={translateTarget} onChange={(e) => setTranslateTarget(e.target.value as "zh" | "en" | "de" | "ja" | "ko" | "ar" | "fr" | "es") }>
                   <option value="zh">中文</option>
                   <option value="en">English</option>
                   <option value="de">Deutsch</option>
+                  <option value="ja">日本語</option>
+                  <option value="ko">한국어</option>
+                  <option value="ar">العربية</option>
+                  <option value="fr">Français</option>
+                  <option value="es">Español</option>
                 </select>
                 <button onClick={onTranslateText} disabled={translateLoading}>
                   {translateLoading ? t("翻译中...", "Translating...") : t("翻译", "Translate")}

@@ -94,6 +94,10 @@ export type RegionCounts = {
   north_america: number;
   europe: number;
   middle_east: number;
+  australia: number;
+  africa: number;
+  neutral_zone: number;
+  east_asia: number;
   greater_china: number;
   se_asia: number;
   other: number;
