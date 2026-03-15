@@ -100,6 +100,22 @@ GEMINI_API_KEY=
 GEMINI_MODEL=gemini-1.5-flash
 ```
 
+## 5.1）端口与 API 地址覆盖（可选）
+
+你可以在 `backend/.env` 里覆盖默认启动地址：
+
+```env
+BACKEND_HOST=0.0.0.0
+BACKEND_PORT=8000
+FRONTEND_HOST=0.0.0.0
+FRONTEND_PORT=5173
+VITE_API_BASE=http://localhost:8000
+```
+
+- `BACKEND_PORT`：覆盖后端 uvicorn 端口
+- `FRONTEND_PORT`：覆盖前端 Vite 端口
+- `VITE_API_BASE`：前端请求的 API 基地址（可指向本地或远程）
+
 ## 6）日常使用
 
 启动：
@@ -128,7 +144,7 @@ GEMINI_MODEL=gemini-1.5-flash
    - 先切换到更快模型验证连通性。
 
 3. 浏览器没自动打开
-   - 手动打开：`http://localhost:5173`
+   - 手动打开：`http://localhost:<FRONTEND_PORT>`（默认 `5173`）
 
 ## 8）关键文件说明
 
@@ -138,3 +154,8 @@ GEMINI_MODEL=gemini-1.5-flash
 - `THIRD_PARTY_NOTICES.md`：依赖与许可证清单
 - `ACKNOWLEDGEMENTS.md`：致谢
 - `LICENSE`：项目许可证
+
+## 9）简短致谢
+
+- 感谢开源维护者、模型社区与工具团队对本项目的支持，包括 Ollama 与 OpenCode/Codex。
+- 完整致谢与第三方信息请见：`ACKNOWLEDGEMENTS.md`、`THIRD_PARTY_NOTICES.md`。

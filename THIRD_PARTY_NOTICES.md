@@ -3,6 +3,47 @@
 This project depends on external open-source packages for both backend (Python wheels) and frontend (npm packages).
 Licenses are listed based on package metadata in the local environment and lockfile.
 
+## Simplified Usage Map
+
+This section is a condensed view that marks where key dependencies are used. The full exhaustive package list remains below.
+
+### Backend Direct Wheels (requirements.txt)
+
+| Package | Used In | Purpose |
+|---|---|---|
+| fastapi | `backend/app/main.py`, `backend/app/api/routes.py` | API framework and routing |
+| uvicorn | `start_local.sh` (CLI launch) | ASGI server runtime |
+| SQLAlchemy | `backend/app/db.py`, `backend/app/models.py`, `backend/app/api/routes.py`, `backend/app/services/*.py` | ORM and database access |
+| psycopg2-binary | runtime via SQLAlchemy when `DATABASE_URL` uses PostgreSQL | PostgreSQL driver (optional, SQLite is default) |
+| pydantic-settings | `backend/app/core/config.py` | Environment-based configuration |
+| python-dateutil | `backend/app/services/collector.py` | Datetime parsing |
+| feedparser | `backend/app/services/collector.py`, `backend/app/api/routes.py` | RSS parsing |
+| requests | `backend/app/services/market_data.py`, `backend/app/services/llm_client.py`, `backend/app/api/routes.py` | HTTP client for external APIs |
+| APScheduler | `backend/app/main.py` | Scheduled collection jobs |
+
+### Frontend Direct Packages (package.json)
+
+| Package | Used In | Purpose |
+|---|---|---|
+| react | `frontend/src/main.tsx`, `frontend/src/App.tsx` | UI runtime |
+| react-dom | `frontend/src/main.tsx` | DOM rendering |
+| react-markdown | `frontend/src/App.tsx` | Render markdown responses |
+| remark-gfm | `frontend/src/App.tsx` | GitHub-Flavored Markdown support |
+| vite | `frontend/package.json` scripts | Dev server and build tool |
+| @vitejs/plugin-react | `frontend/vite.config.ts` | React transform for Vite |
+| typescript | `frontend/package.json` scripts | Type checking/build |
+| @types/react, @types/react-dom | Type system only | Type definitions |
+
+### Lockfile Families (Grouped)
+
+| Family | Why many entries appear |
+|---|---|
+| `@esbuild/*` | Platform-specific binaries for different OS/CPU targets |
+| `@rollup/rollup-*` | Platform-specific rollup binaries |
+| `@babel/*` | React/TS build transform toolchain |
+| `@types/*` | Type declaration packages |
+| `micromark*`, `mdast-util-*`, `hast-util-*`, `unist-util-*` | Markdown parsing/rendering stack behind `react-markdown` |
+
 ## Python Packages (Backend)
 
 | Package | Version | License | Homepage |

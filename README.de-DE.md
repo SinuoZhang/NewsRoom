@@ -100,6 +100,22 @@ GEMINI_API_KEY=
 GEMINI_MODEL=gemini-1.5-flash
 ```
 
+## 5.1) Ports und API-Basis ueberschreiben (optional)
+
+In `backend/.env` kannst du die Standardadressen ueberschreiben:
+
+```env
+BACKEND_HOST=0.0.0.0
+BACKEND_PORT=8000
+FRONTEND_HOST=0.0.0.0
+FRONTEND_PORT=5173
+VITE_API_BASE=http://localhost:8000
+```
+
+- `BACKEND_PORT` ueberschreibt den uvicorn-Port.
+- `FRONTEND_PORT` ueberschreibt den Vite-Port.
+- `VITE_API_BASE` steuert die API-Zieladresse im Frontend (lokal oder remote).
+
 ## 6) Taegliche Nutzung
 
 Start:
@@ -128,7 +144,7 @@ Logs:
    - Erst mit schnellerem Modell testen.
 
 3. Browser oeffnet nicht automatisch
-   - Manuell aufrufen: `http://localhost:5173`
+   - Manuell aufrufen: `http://localhost:<FRONTEND_PORT>` (Standard `5173`)
 
 ## 8) Wichtige Dateien
 
@@ -138,3 +154,8 @@ Logs:
 - `THIRD_PARTY_NOTICES.md`: Abhaengigkeiten + Lizenzen
 - `ACKNOWLEDGEMENTS.md`: Danksagungen
 - `LICENSE`: Projektlizenz
+
+## 9) Kurze Danksagung
+
+- Wir danken den Open-Source-Maintainern, Modell-Communities und Tooling-Teams, die dieses Projekt ermoeglichen, einschliesslich Ollama und OpenCode/Codex.
+- Vollstaendige Angaben stehen in `ACKNOWLEDGEMENTS.md` und `THIRD_PARTY_NOTICES.md`.

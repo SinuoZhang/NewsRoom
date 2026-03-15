@@ -13,6 +13,11 @@ mkdir -p "$LOG_DIR"
 
 UI_LANG="en"
 LANG_FROM_ARG=""
+BACKEND_HOST="0.0.0.0"
+BACKEND_PORT="8000"
+FRONTEND_HOST="0.0.0.0"
+FRONTEND_PORT="5173"
+FRONTEND_API_BASE=""
 
 timestamp() {
   date "+%Y-%m-%d %H:%M:%S"
@@ -241,6 +246,46 @@ ensure_env_file() {
   fi
 }
 
+is_valid_port() {
+  local p="${1:-}"
+  case "$p" in
+    ''|*[!0-9]*) return 1 ;;
+  esac
+  [ "$p" -ge 1 ] && [ "$p" -le 65535 ]
+}
+
+load_runtime_overrides() {
+  set -a
+  # shellcheck disable=SC1090
+  source "$BACKEND_ENV"
+  set +a
+
+  BACKEND_HOST="${BACKEND_HOST:-0.0.0.0}"
+  BACKEND_PORT="${BACKEND_PORT:-8000}"
+  FRONTEND_HOST="${FRONTEND_HOST:-0.0.0.0}"
+  FRONTEND_PORT="${FRONTEND_PORT:-5173}"
+
+  if ! is_valid_port "$BACKEND_PORT"; then
+    say "BACKEND_PORT 非法，已回退为 8000。" "Invalid BACKEND_PORT, fallback to 8000." "Ungueltiger BACKEND_PORT, Rueckfall auf 8000."
+    BACKEND_PORT="8000"
+  fi
+  if ! is_valid_port "$FRONTEND_PORT"; then
+    say "FRONTEND_PORT 非法，已回退为 5173。" "Invalid FRONTEND_PORT, fallback to 5173." "Ungueltiger FRONTEND_PORT, Rueckfall auf 5173."
+    FRONTEND_PORT="5173"
+  fi
+
+  FRONTEND_API_BASE="${VITE_API_BASE:-}"
+  if [ -z "$FRONTEND_API_BASE" ]; then
+    FRONTEND_API_BASE="http://localhost:${BACKEND_PORT}"
+  fi
+
+  if [ -z "${CORS_ORIGINS:-}" ] || [ "${CORS_ORIGINS:-}" = "http://localhost:5173" ]; then
+    upsert_env_line "CORS_ORIGINS" "http://localhost:${FRONTEND_PORT}" "$BACKEND_ENV"
+  fi
+
+  log_config "Runtime overrides backend=${BACKEND_HOST}:${BACKEND_PORT} frontend=${FRONTEND_HOST}:${FRONTEND_PORT} api_base=${FRONTEND_API_BASE}"
+}
+
 configure_llm_if_needed() {
   set -a
   # shellcheck disable=SC1090
@@ -365,9 +410,9 @@ ensure_frontend_deps() {
 open_browser() {
   sleep 2
   if command -v open >/dev/null 2>&1; then
-    open "http://localhost:5173"
+    open "http://localhost:${FRONTEND_PORT}"
   elif command -v xdg-open >/dev/null 2>&1; then
-    xdg-open "http://localhost:5173"
+    xdg-open "http://localhost:${FRONTEND_PORT}"
   fi
 }
 
@@ -386,23 +431,29 @@ main() {
 
   check_and_report
   ensure_env_file
+  load_runtime_overrides
   configure_llm_if_needed
   setup_python_env
   ensure_backend_deps
   ensure_frontend_deps
+
+  printf "%s\n" "$(msg "运行地址：" "Runtime endpoints:" "Laufzeit-Endpunkte:")"
+  printf "- Backend:  http://localhost:%s\n" "$BACKEND_PORT"
+  printf "- Frontend: http://localhost:%s\n" "$FRONTEND_PORT"
+  printf "- API Base: %s\n\n" "$FRONTEND_API_BASE"
 
   printf "\n%s\n" "$(msg "日志文件：" "Log files:" "Logdateien:")"
   printf "- %s\n- %s\n\n" "$CONFIG_LOG" "$RUN_LOG"
 
   trap cleanup EXIT INT TERM
 
-  (cd "$ROOT_DIR/backend" && "$ROOT_DIR/.venv/bin/python" -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload 2>&1 | tee -a "$RUN_LOG") &
+  (cd "$ROOT_DIR/backend" && "$ROOT_DIR/.venv/bin/python" -m uvicorn app.main:app --host "$BACKEND_HOST" --port "$BACKEND_PORT" --reload 2>&1 | tee -a "$RUN_LOG") &
   BACK_PID=$!
 
   open_browser &
 
   say "正在启动前端开发服务器..." "Starting frontend dev server..." "Frontend-Entwicklungsserver wird gestartet..."
-  npm --prefix "$ROOT_DIR/frontend" run dev 2>&1 | tee -a "$RUN_LOG"
+  VITE_API_BASE="$FRONTEND_API_BASE" npm --prefix "$ROOT_DIR/frontend" run dev -- --host "$FRONTEND_HOST" --port "$FRONTEND_PORT" 2>&1 | tee -a "$RUN_LOG"
 }
 
 main "$@"

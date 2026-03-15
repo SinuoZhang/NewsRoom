@@ -102,6 +102,22 @@ GEMINI_API_KEY=
 GEMINI_MODEL=gemini-1.5-flash
 ```
 
+## 5.1) Override ports and API base (optional)
+
+You can override startup ports in `backend/.env`:
+
+```env
+BACKEND_HOST=0.0.0.0
+BACKEND_PORT=8000
+FRONTEND_HOST=0.0.0.0
+FRONTEND_PORT=5173
+VITE_API_BASE=http://localhost:8000
+```
+
+- `BACKEND_PORT` overrides uvicorn port.
+- `FRONTEND_PORT` overrides Vite dev server port.
+- `VITE_API_BASE` lets frontend call any API endpoint (local or remote).
+
 ## 6) Daily usage
 
 Start:
@@ -131,7 +147,7 @@ Logs:
    - Try a faster/smaller model first.
 
 3. Browser does not auto-open
-   - Open manually: `http://localhost:5173`
+   - Open manually: `http://localhost:<FRONTEND_PORT>` (default `5173`)
 
 ## 8) Repository files you should know
 
@@ -141,3 +157,8 @@ Logs:
 - `THIRD_PARTY_NOTICES.md`: dependencies + detected licenses
 - `ACKNOWLEDGEMENTS.md`: open-source acknowledgements
 - `LICENSE`: project license
+
+## 9) Acknowledgement (Short)
+
+- We thank open-source maintainers, model communities, and tooling teams that make this project possible, including Ollama and OpenCode/Codex.
+- For full attribution details, see `ACKNOWLEDGEMENTS.md` and `THIRD_PARTY_NOTICES.md`.
