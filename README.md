@@ -1,5 +1,13 @@
 # NewsRoom
 
+NewsRoom is a local-first news aggregation and analysis workspace designed for research and monitoring workflows.
+
+- Aggregates multi-source RSS feeds and stores normalized records locally
+- Provides region/topic filtering with incremental refresh in the frontend
+- Includes an integrated LLM analysis panel (Ollama / OpenAI / Gemini)
+- Ships with guided startup/uninstall scripts for safe local operation
+- Supports configurable runtime endpoints (`BACKEND_PORT`, `FRONTEND_PORT`, `VITE_API_BASE`)
+
 Choose your language / 选择语言 / Sprache waehlen:
 
 - English: `README.en.md`
