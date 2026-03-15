@@ -95,7 +95,7 @@ Sprach-Shortcut:
 
 Beim ersten Lauf macht `start_local.sh` Folgendes:
 
-1. Sprache waehlen (gespeichert in `.startup_lang`)
+1. Sprache waehlen (gespeichert in `backend/.env` als `STARTUP_LANG`)
 2. Versionspruefung (`python3>=3.10`, `node>=18`, `npm`)
 3. `backend/.env` aus `.env.example` erstellen (falls noetig)
 4. LLM-Setup (Ollama/OpenAI/Gemini) bei Bedarf

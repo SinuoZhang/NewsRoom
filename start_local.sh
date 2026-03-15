@@ -7,7 +7,6 @@ LOG_DIR="$ROOT_DIR/logs"
 CONFIG_LOG="$LOG_DIR/config_meta.log"
 RUN_LOG="$LOG_DIR/runtime.log"
 BACKEND_ENV="$ROOT_DIR/backend/.env"
-LANG_FILE="$ROOT_DIR/.startup_lang"
 
 mkdir -p "$LOG_DIR"
 
@@ -81,7 +80,6 @@ normalize_lang() {
 pick_language() {
   local normalized_arg=""
   local installed_state="false"
-  local saved_lang=""
   local env_lang=""
 
   if [ -f "$BACKEND_ENV" ] && [ -d "$ROOT_DIR/.venv" ] && [ -d "$ROOT_DIR/frontend/node_modules" ]; then
@@ -91,18 +89,6 @@ pick_language() {
   normalized_arg="$(normalize_lang "$LANG_FROM_ARG")"
   if [ -n "$normalized_arg" ]; then
     UI_LANG="$normalized_arg"
-    printf "%s" "$UI_LANG" > "$LANG_FILE"
-    return 0
-  fi
-
-  if [ -f "$LANG_FILE" ]; then
-    saved_lang="$(normalize_lang "$(cat "$LANG_FILE" 2>/dev/null || true)")"
-    if [ -n "$saved_lang" ]; then
-      UI_LANG="$saved_lang"
-    fi
-  fi
-
-  if [ "$installed_state" = "true" ] && [ -n "$saved_lang" ]; then
     return 0
   fi
 
@@ -114,14 +100,12 @@ pick_language() {
     env_lang="$(normalize_lang "${STARTUP_LANG:-}")"
     if [ -n "$env_lang" ]; then
       UI_LANG="$env_lang"
-      printf "%s" "$UI_LANG" > "$LANG_FILE"
       return 0
     fi
   fi
 
   if [ "$installed_state" = "true" ]; then
     UI_LANG="zh"
-    printf "%s" "$UI_LANG" > "$LANG_FILE"
     return 0
   fi
 
@@ -137,10 +121,6 @@ pick_language() {
     *) UI_LANG="en" ;;
   esac
 
-  printf "%s" "$UI_LANG" > "$LANG_FILE"
-  if [ -f "$BACKEND_ENV" ]; then
-    upsert_env_line "STARTUP_LANG" "$UI_LANG" "$BACKEND_ENV"
-  fi
 }
 
 ask_yes_no() {
@@ -264,13 +244,76 @@ ensure_env_file() {
       log_config "Created backend/.env from .env.example"
       say "已创建 backend/.env（权限已尽量收紧）。" "Created backend/.env (permissions tightened)." "backend/.env erstellt (Berechtigungen eingeschraenkt)."
     else
-      say "找不到 .env.example，请手动创建 backend/.env。" "Cannot find .env.example. Please create backend/.env manually." "Kann .env.example nicht finden. Bitte backend/.env manuell erstellen."
-      exit 1
+      cat > "$BACKEND_ENV" <<'EOF'
+DATABASE_URL=sqlite:///./newsroom.db
+CORS_ORIGINS=http://localhost:5173
+
+BACKEND_HOST=0.0.0.0
+BACKEND_PORT=8000
+FRONTEND_HOST=0.0.0.0
+FRONTEND_PORT=5173
+VITE_API_BASE=http://localhost:8000
+STARTUP_LANG=en
+
+OLLAMA_URL=http://localhost:11434
+OLLAMA_MODEL=gpt-oss:120b-cloud
+LLM_PROVIDER=ollama
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-4o-mini
+GEMINI_API_KEY=
+GEMINI_MODEL=gemini-1.5-flash
+
+AUTO_COLLECT_MINUTES=10
+RETENTION_DAYS=3
+EOF
+      chmod 600 "$BACKEND_ENV" || true
+      log_config "Created backend/.env from built-in defaults"
+      say "未找到 .env.example，已使用内置默认模板创建 backend/.env。" "No .env.example found; created backend/.env from built-in defaults." "Keine .env.example gefunden; backend/.env mit integrierter Standardvorlage erstellt."
     fi
   else
     say "已取消启动。" "Startup cancelled." "Start abgebrochen."
     exit 1
   fi
+}
+
+ensure_env_defaults() {
+  if [ ! -f "$BACKEND_ENV" ]; then
+    return 0
+  fi
+
+  set -a
+  # shellcheck disable=SC1090
+  source "$BACKEND_ENV"
+  set +a
+
+  local backend_port_current="${BACKEND_PORT:-8000}"
+  if ! is_valid_port "$backend_port_current"; then
+    backend_port_current="8000"
+  fi
+
+  upsert_env_line "DATABASE_URL" "${DATABASE_URL:-sqlite:///./newsroom.db}" "$BACKEND_ENV"
+  upsert_env_line "CORS_ORIGINS" "${CORS_ORIGINS:-http://localhost:5173}" "$BACKEND_ENV"
+
+  upsert_env_line "BACKEND_HOST" "${BACKEND_HOST:-0.0.0.0}" "$BACKEND_ENV"
+  upsert_env_line "BACKEND_PORT" "$backend_port_current" "$BACKEND_ENV"
+  upsert_env_line "FRONTEND_HOST" "${FRONTEND_HOST:-0.0.0.0}" "$BACKEND_ENV"
+  upsert_env_line "FRONTEND_PORT" "${FRONTEND_PORT:-5173}" "$BACKEND_ENV"
+  upsert_env_line "VITE_API_BASE" "${VITE_API_BASE:-http://localhost:${backend_port_current}}" "$BACKEND_ENV"
+  upsert_env_line "STARTUP_LANG" "${STARTUP_LANG:-$UI_LANG}" "$BACKEND_ENV"
+
+  upsert_env_line "OLLAMA_URL" "${OLLAMA_URL:-http://localhost:11434}" "$BACKEND_ENV"
+  upsert_env_line "OLLAMA_MODEL" "${OLLAMA_MODEL:-gpt-oss:120b-cloud}" "$BACKEND_ENV"
+  upsert_env_line "LLM_PROVIDER" "${LLM_PROVIDER:-ollama}" "$BACKEND_ENV"
+  upsert_env_line "OPENAI_API_KEY" "${OPENAI_API_KEY:-}" "$BACKEND_ENV"
+  upsert_env_line "OPENAI_MODEL" "${OPENAI_MODEL:-gpt-4o-mini}" "$BACKEND_ENV"
+  upsert_env_line "GEMINI_API_KEY" "${GEMINI_API_KEY:-}" "$BACKEND_ENV"
+  upsert_env_line "GEMINI_MODEL" "${GEMINI_MODEL:-gemini-1.5-flash}" "$BACKEND_ENV"
+
+  upsert_env_line "AUTO_COLLECT_MINUTES" "${AUTO_COLLECT_MINUTES:-10}" "$BACKEND_ENV"
+  upsert_env_line "RETENTION_DAYS" "${RETENTION_DAYS:-3}" "$BACKEND_ENV"
+
+  chmod 600 "$BACKEND_ENV" || true
+  log_config "Ensured backend/.env defaults and required keys"
 }
 
 is_valid_port() {
@@ -568,6 +611,8 @@ main() {
 
   check_and_report
   ensure_env_file
+  ensure_env_defaults
+  upsert_env_line "STARTUP_LANG" "$UI_LANG" "$BACKEND_ENV"
   load_runtime_overrides
   configure_llm_if_needed
   setup_python_env

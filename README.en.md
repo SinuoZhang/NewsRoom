@@ -103,7 +103,7 @@ Optional language shortcut:
 
 On first run, `start_local.sh` will:
 
-1. Ask your preferred UI language (saved to `.startup_lang`)
+1. Ask your preferred UI language (saved to `backend/.env` as `STARTUP_LANG`)
 2. Check runtime versions (`python3>=3.10`, `node>=18`, `npm`)
 3. Create `backend/.env` from `.env.example` if needed
 4. Optionally guide LLM provider setup (Ollama/OpenAI/Gemini)

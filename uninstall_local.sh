@@ -4,7 +4,6 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_ENV="$ROOT_DIR/backend/.env"
-LANG_FILE="$ROOT_DIR/.startup_lang"
 
 UI_LANG="en"
 LANG_FROM_ARG=""
@@ -85,17 +84,21 @@ ask_yes_no() {
 
 pick_language() {
   local normalized_arg=""
+  local env_lang=""
   normalized_arg="$(normalize_lang "$LANG_FROM_ARG")"
   if [ -n "$normalized_arg" ]; then
     UI_LANG="$normalized_arg"
     return 0
   fi
 
-  if [ -f "$LANG_FILE" ]; then
-    local saved
-    saved="$(normalize_lang "$(cat "$LANG_FILE" 2>/dev/null || true)")"
-    if [ -n "$saved" ]; then
-      UI_LANG="$saved"
+  if [ -f "$BACKEND_ENV" ]; then
+    set -a
+    # shellcheck disable=SC1090
+    source "$BACKEND_ENV"
+    set +a
+    env_lang="$(normalize_lang "${STARTUP_LANG:-}")"
+    if [ -n "$env_lang" ]; then
+      UI_LANG="$env_lang"
       return 0
     fi
   fi
@@ -198,7 +201,6 @@ main() {
   remove_if_exists "$ROOT_DIR/backend/newsroom.db-journal"
 
   remove_if_exists "$BACKEND_ENV"
-  remove_if_exists "$LANG_FILE"
 
   remove_if_exists "$ROOT_DIR/.pytest_cache"
   remove_if_exists "$ROOT_DIR/.mypy_cache"

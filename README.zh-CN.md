@@ -95,7 +95,7 @@ chmod +x start_local.sh
 
 首次运行 `start_local.sh` 会按步骤引导：
 
-1. 先选语言（保存到 `.startup_lang`）
+1. 先选语言（保存到 `backend/.env` 的 `STARTUP_LANG`）
 2. 检查版本（`python3>=3.10`、`node>=18`、`npm`）
 3. 若无 `backend/.env`，从 `.env.example` 创建
 4. 按需引导配置 LLM（Ollama/OpenAI/Gemini）
