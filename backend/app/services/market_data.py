@@ -30,7 +30,7 @@ def get_market_snapshot() -> dict:
     try:
         fx = _safe_call(_fetch_ecb_fx, default={"eur_cny": None, "usd_cny": None})
         metals = _safe_call(_fetch_lbma_metals, default={"gold_usd": None, "silver_usd": None})
-        copper = _safe_call(_fetch_yahoo_copper, default={"price": None, "change_pct": None})
+        copper = _safe_call(_fetch_yahoo_copper, default={"price": None, "change_pct": None, "source": "Yahoo", "source_url": None})
 
         items = [
             {
@@ -38,6 +38,7 @@ def get_market_snapshot() -> dict:
                 "label": "Gold",
                 "symbol": "LBMA Gold PM",
                 "source": "LBMA",
+                "source_url": LBMA_GOLD_PM_URL,
                 "price": metals.get("gold_usd"),
                 "unit": "USD/oz",
                 "change_pct": None,
@@ -48,6 +49,7 @@ def get_market_snapshot() -> dict:
                 "label": "Silver",
                 "symbol": "LBMA Silver",
                 "source": "LBMA",
+                "source_url": LBMA_SILVER_URL,
                 "price": metals.get("silver_usd"),
                 "unit": "USD/oz",
                 "change_pct": None,
@@ -57,7 +59,8 @@ def get_market_snapshot() -> dict:
                 "key": "copper_usd",
                 "label": "Copper",
                 "symbol": "HG=F",
-                "source": "Yahoo",
+                "source": copper.get("source") or "Yahoo",
+                "source_url": copper.get("source_url"),
                 "price": copper.get("price"),
                 "unit": "USD/lb",
                 "change_pct": copper.get("change_pct"),
@@ -68,6 +71,7 @@ def get_market_snapshot() -> dict:
                 "label": "EUR/CNY",
                 "symbol": "ECB",
                 "source": "ECB",
+                "source_url": ECB_FX_URL,
                 "price": fx.get("eur_cny"),
                 "unit": "CNY",
                 "change_pct": None,
@@ -78,6 +82,7 @@ def get_market_snapshot() -> dict:
                 "label": "USD/CNY",
                 "symbol": "ECB-derived",
                 "source": "ECB",
+                "source_url": ECB_FX_URL,
                 "price": fx.get("usd_cny"),
                 "unit": "CNY",
                 "change_pct": None,
@@ -144,15 +149,15 @@ def _extract_lbma_usd(rows: list) -> float | None:
 
 
 def _fetch_yahoo_copper() -> dict:
-    quote = _safe_call(_fetch_yahoo_quote_copper, default={"price": None, "change_pct": None})
+    quote = _safe_call(_fetch_yahoo_quote_copper, default={"price": None, "change_pct": None, "source": None, "source_url": None})
     if quote.get("price") is not None:
         return quote
 
-    chart = _safe_call(_fetch_yahoo_chart_copper, default={"price": None, "change_pct": None})
+    chart = _safe_call(_fetch_yahoo_chart_copper, default={"price": None, "change_pct": None, "source": None, "source_url": None})
     if chart.get("price") is not None:
         return chart
 
-    stooq = _safe_call(_fetch_stooq_copper, default={"price": None, "change_pct": None})
+    stooq = _safe_call(_fetch_stooq_copper, default={"price": None, "change_pct": None, "source": None, "source_url": None})
     return stooq
 
 
@@ -162,9 +167,14 @@ def _fetch_yahoo_quote_copper() -> dict:
     payload = response.json()
     rows = payload.get("quoteResponse", {}).get("result", [])
     if not rows:
-        return {"price": None, "change_pct": None}
+        return {"price": None, "change_pct": None, "source": "Yahoo Quote", "source_url": f"{YAHOO_QUOTE_URL}?symbols=HG=F"}
     row = rows[0]
-    return {"price": row.get("regularMarketPrice"), "change_pct": row.get("regularMarketChangePercent")}
+    return {
+        "price": row.get("regularMarketPrice"),
+        "change_pct": row.get("regularMarketChangePercent"),
+        "source": "Yahoo Quote",
+        "source_url": f"{YAHOO_QUOTE_URL}?symbols=HG=F",
+    }
 
 
 def _fetch_yahoo_chart_copper() -> dict:
@@ -173,11 +183,13 @@ def _fetch_yahoo_chart_copper() -> dict:
     payload = response.json()
     result = payload.get("chart", {}).get("result", [])
     if not result:
-        return {"price": None, "change_pct": None}
+        return {"price": None, "change_pct": None, "source": "Yahoo Chart", "source_url": f"{YAHOO_CHART_URL}?range=1d&interval=1m"}
     meta = result[0].get("meta", {})
     return {
         "price": meta.get("regularMarketPrice"),
         "change_pct": meta.get("regularMarketChangePercent"),
+        "source": "Yahoo Chart",
+        "source_url": f"{YAHOO_CHART_URL}?range=1d&interval=1m",
     }
 
 
@@ -186,23 +198,23 @@ def _fetch_stooq_copper() -> dict:
     response.raise_for_status()
     row = response.text.strip()
     if not row:
-        return {"price": None, "change_pct": None}
+        return {"price": None, "change_pct": None, "source": "Stooq", "source_url": STOOQ_COPPER_URL}
 
     parts = row.split(",")
     if len(parts) < 7:
-        return {"price": None, "change_pct": None}
+        return {"price": None, "change_pct": None, "source": "Stooq", "source_url": STOOQ_COPPER_URL}
 
     # Symbol,Date,Time,Open,High,Low,Close,Volume
     try:
         open_px = float(parts[3]) if parts[3] else None
         close_px = float(parts[6]) if parts[6] else None
     except Exception:
-        return {"price": None, "change_pct": None}
+        return {"price": None, "change_pct": None, "source": "Stooq", "source_url": STOOQ_COPPER_URL}
 
     change_pct = None
     if open_px and close_px:
         change_pct = ((close_px - open_px) / open_px) * 100
-    return {"price": close_px, "change_pct": change_pct}
+    return {"price": close_px, "change_pct": change_pct, "source": "Stooq", "source_url": STOOQ_COPPER_URL}
 
 
 def _safe_call(func, default: dict):

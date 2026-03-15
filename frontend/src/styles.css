@@ -19,11 +19,11 @@ body {
   font-size: 19px;
   background: radial-gradient(circle at 10% 10%, #f8eed6, var(--bg));
   color: var(--text);
-  overflow: auto;
+  overflow-x: hidden;
 }
 
 .page {
-  width: 100vw;
+  width: 100%;
   max-width: none;
   margin: 0;
   padding: 20px;
@@ -34,20 +34,47 @@ body {
   overflow: visible;
 }
 
+html {
+  font-size: 16px;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  max-width: 100%;
+}
+
 .hero {
   margin-bottom: 18px;
 }
 
 .hero h1 {
   margin: 0;
-  font-size: clamp(2rem, 4vw, 3.2rem);
+  font-size: clamp(1.8rem, 4vw, 2.8rem);
   letter-spacing: 0.02em;
 }
 
 .hero p {
   margin: 6px 0 0;
   color: var(--muted);
-  font-size: 1.05rem;
+  font-size: 0.95rem;
+}
+
+/* 响应式标题和段落 */
+@media (max-width: 768px) {
+  .hero {
+    margin-bottom: 12px;
+    text-align: center;
+  }
+  
+  .hero h1 {
+    font-size: clamp(1.5rem, 6vw, 2.2rem);
+  }
+  
+  .hero p {
+    font-size: 0.85rem;
+  }
 }
 
 .panel {
@@ -70,10 +97,25 @@ body {
   gap: 12px;
 }
 
+.market-header-actions {
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.market-local-time {
+  color: var(--muted);
+  font-size: 14px;
+  white-space: nowrap;
+  border: 1px solid var(--line);
+  background: #fbfaf4;
+  border-radius: 999px;
+  padding: 6px 10px;
+}
+
 .market-row {
   margin-top: 10px;
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 10px;
   overflow-x: auto;
   padding-bottom: 4px;
@@ -81,11 +123,33 @@ body {
 
 .market-card {
   flex: 0 0 auto;
-  min-width: 220px;
+  min-width: 180px;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: #fff;
   padding: 10px;
+}
+
+/* 响应式市场面板 */
+@media (max-width: 768px) {
+  .market-row {
+    justify-content: center;
+  }
+  
+  .market-card {
+    min-width: 150px;
+    margin: 0 5px;
+  }
+  
+  .market-header-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .market-header-row button {
+    width: 100%;
+    margin-top: 8px;
+  }
 }
 
 .market-main-line {
@@ -98,6 +162,16 @@ body {
   margin-top: 6px;
   color: var(--muted);
   font-size: 13px;
+}
+
+.market-source-link {
+  color: #1f4f8a;
+  text-decoration: none;
+  border-bottom: 1px dashed #1f4f8a;
+}
+
+.market-source-link:hover {
+  text-decoration: underline;
 }
 
 .market-title {
@@ -199,23 +273,41 @@ body {
 }
 
 .control-left {
-  min-width: 420px;
-  flex: 1 1 520px;
+  min-width: 280px;
+  flex: 1 1 400px;
 }
 
 .control-right {
   flex: 0 1 auto;
+  min-width: 200px;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: #fff;
   padding: 8px 10px;
 }
 
+/* 响应式控制面板 */
+@media (max-width: 992px) {
+  .control-layout {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .control-left,
+  .control-right {
+    min-width: 100%;
+  }
+  
+  .control-info-line {
+    flex-wrap: wrap;
+  }
+}
+
 .control-info-line {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 8px;
-  overflow-x: auto;
+  overflow-x: visible;
   align-items: center;
 }
 
@@ -259,23 +351,33 @@ button {
   border: 1px solid var(--line);
   padding: 9px 11px;
   font-size: 17px;
+  max-width: 100%;
 }
 
 input[type="checkbox"] {
-  width: 30px;
-  height: 30px;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
   accent-color: #1d4d44;
   vertical-align: middle;
+  margin: 0 2px 0 0;
 }
 
 .meta label {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 2px;
+}
+
+.llm-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
 }
 
 input {
-  min-width: 260px;
+  min-width: 0;
+  width: min(100%, 320px);
 }
 
 button {
@@ -375,6 +477,21 @@ button {
   padding-right: 4px;
 }
 
+/* 响应式新闻卡片 */
+@media (max-width: 992px) {
+  .list {
+    overflow-y: visible;
+  }
+  
+  .card {
+    margin-bottom: 16px;
+  }
+  
+  .card p {
+    -webkit-line-clamp: 4;
+  }
+}
+
 .content-grid {
   display: grid;
   grid-template-areas: "map news llm";
@@ -384,6 +501,73 @@ button {
   width: 100%;
   min-height: 0;
   height: 100%;
+}
+
+/* 响应式网格布局 */
+@media (max-width: 1400px) {
+  .content-grid {
+    grid-template-areas:
+      "news news"
+      "map llm";
+    grid-template-columns: 1fr 1fr;
+  }
+  
+  .news-column {
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
+  }
+  
+  .map-panel,
+  .llm-panel {
+    position: relative;
+    top: auto;
+  }
+  
+  .llm-top-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 992px) {
+  .content-grid {
+    grid-template-areas:
+      "map"
+      "news"
+      "llm";
+    grid-template-columns: 1fr;
+  }
+  
+  .map-panel,
+  .news-column,
+  .llm-panel {
+    position: relative;
+    top: auto;
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
+  }
+  
+  .list {
+    overflow: visible;
+  }
+  
+  .meta {
+    flex-direction: column;
+    gap: 2px;
+  }
+  
+  input {
+    min-width: 100%;
+  }
+  
+  .control-layout {
+    display: block;
+  }
+  
+  .llm-select-input {
+    min-width: 100%;
+  }
 }
 
 .news-column {
@@ -423,6 +607,16 @@ button {
 .card h3 {
   margin: 8px 0;
   font-size: 1.3rem;
+}
+
+.card p {
+  margin: 0;
+  color: var(--text);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .meta {
@@ -470,6 +664,14 @@ button {
   overflow-y: auto;
 }
 
+/* 响应式面板高度 */
+@media (max-width: 992px) {
+  .map-panel {
+    max-height: none;
+    height: auto;
+  }
+}
+
 .map-dot-group {
   cursor: pointer;
 }
@@ -492,9 +694,80 @@ button {
   overflow: hidden;
 }
 
+/* 响应式LLM面板高度 */
+@media (max-width: 992px) {
+  .llm-panel {
+    height: auto;
+    max-height: none;
+    position: relative;
+    top: auto;
+  }
+}
+
 .llm-panel h3 {
   margin: 0 0 4px;
   font-size: 22px;
+}
+
+.llm-drawer {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  margin-bottom: 8px;
+}
+
+.llm-drawer-handle {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid #e7dfc8;
+  border-radius: 10px 10px 0 0;
+  background: #f5f0e1;
+  color: #4e4738;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  font-size: 15px;
+}
+
+.llm-drawer.collapsed .llm-drawer-handle {
+  border-bottom-color: transparent;
+  border-radius: 10px;
+}
+
+.llm-drawer-title {
+  font-weight: 700;
+}
+
+.llm-drawer-arrow {
+  font-size: 14px;
+}
+
+.llm-drawer-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 10px 10px;
+}
+
+.llm-summary-item {
+  border: 1px solid var(--line);
+  background: #fbfaf4;
+  border-radius: 999px;
+  padding: 3px 9px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.llm-drawer-body {
+  padding: 8px 10px 10px;
+}
+
+@media (min-width: 993px) {
+  .llm-drawer-body {
+    max-height: 44vh;
+    overflow-y: auto;
+  }
 }
 
 .llm-top-fixed {
@@ -521,12 +794,13 @@ button {
 }
 
 .llm-notes {
-  flex: 1 1 46%;
-  align-self: flex-start;
+  flex: 0 0 auto;
+  align-self: stretch;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: #fff;
   padding: 6px;
+  margin-bottom: 8px;
 }
 
 .chat-box {
@@ -534,7 +808,8 @@ button {
   border-radius: 8px;
   background: linear-gradient(180deg, #fffdf7, #fbf8ee);
   min-height: 0;
-  height: 100%;
+  height: auto;
+  flex: 1 1 0;
   max-height: 100%;
   resize: none;
   overflow: auto;
@@ -546,6 +821,8 @@ button {
   flex: 1 1 0;
   min-height: 0;
   height: 100%;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   margin-top: 0;
   position: relative;
@@ -574,6 +851,16 @@ button {
   margin: 4px 0 6px;
   font-size: 12px;
   color: var(--muted);
+}
+
+.llm-generating-hint {
+  margin: 4px 0 6px;
+  padding: 6px 10px;
+  border: 1px solid #c7bfa7;
+  border-radius: 8px;
+  background: #f4efdf;
+  color: #5b533f;
+  font-size: 14px;
 }
 
 .llm-bottom-fixed {
@@ -666,6 +953,111 @@ button {
   margin-bottom: 5px;
 }
 
+.llm-model-row {
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.llm-current-model-inline {
+  margin: 0 0 0 10px;
+  white-space: normal;
+}
+
+.llm-model-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  width: 100%;
+}
+
+.llm-pending-inline {
+  margin: 2px 0 0 10px;
+  white-space: normal;
+}
+
+.llm-mode-row {
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.llm-mode-left {
+  flex-wrap: wrap;
+}
+
+.llm-memory-actions {
+  margin-left: 0;
+  flex-wrap: wrap;
+}
+
+.llm-memory-actions button {
+  width: 100%;
+  white-space: nowrap;
+  flex: 1 1 200px;
+  padding: 7px 10px;
+}
+
+.llm-select-row {
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.llm-select-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+}
+
+@media (max-width: 1280px) {
+  .llm-controls .row {
+    align-items: stretch;
+  }
+
+  .llm-model-row,
+  .llm-select-row,
+  .llm-mode-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .llm-mode-left,
+  .llm-memory-actions {
+    width: 100%;
+  }
+
+  .llm-memory-actions button,
+  .llm-mode-left select,
+  .llm-controls .row > button {
+    width: 100%;
+  }
+
+  .llm-current-model-inline,
+  .llm-pending-inline {
+    margin-left: 0;
+  }
+}
+
+/* 响应式LLM选择输入框 */
+@media (max-width: 992px) {
+  .llm-select-input {
+    min-width: 100%;
+  }
+  
+  .llm-controls .row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .llm-mode-row,
+  .llm-memory-actions {
+    flex-wrap: wrap;
+  }
+  
+  .llm-memory-actions button {
+    flex: 1 1 48%;
+    margin-bottom: 8px;
+  }
+}
+
 .llm-notes .meta-line,
 .llm-controls .meta-line {
   margin-top: 3px;
@@ -698,11 +1090,30 @@ button {
 
 .selected-list-item {
   display: grid;
-  grid-template-columns: 70px 180px 1fr;
+  grid-template-columns: 50px minmax(110px, 170px) minmax(0, 1fr);
   gap: 10px;
   padding: 8px 10px;
   border-bottom: 1px solid #ece6d6;
   font-size: 14px;
+}
+
+/* 响应式选中列表面板 */
+@media (max-width: 768px) {
+  .selected-list-panel {
+    margin: 4px 0 8px;
+    max-height: 180px;
+  }
+  
+  .selected-list-item {
+    grid-template-columns: 40px 1fr;
+    gap: 8px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  
+  .selected-item-source {
+    display: none;
+  }
 }
 
 .selected-list-item:last-child {
@@ -726,6 +1137,12 @@ button {
 .chat-markdown th {
   font-size: 1em;
   line-height: 1.65;
+}
+
+.chat-markdown {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .chat-markdown h1,
@@ -765,6 +1182,18 @@ button {
   border-radius: 10px;
 }
 
+.world-map-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+@media (min-width: 993px) {
+  .world-map {
+    width: 780px;
+    max-width: none;
+  }
+}
+
 .map-dot {
   fill: #2f7f6f;
   opacity: 0.95;
@@ -795,6 +1224,93 @@ button {
 .map-legend button {
   font-size: 17px;
   padding: 8px 12px;
+}
+
+.map-translate-box {
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  padding: 10px;
+}
+
+.map-translate-input {
+  width: 100%;
+  resize: vertical;
+  min-height: 80px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 16px;
+  font-family: inherit;
+  margin-bottom: 8px;
+}
+
+.map-translate-output {
+  margin-top: 8px;
+  border: 1px solid #e1d8c0;
+  border-radius: 8px;
+  background: #fcfaf3;
+  padding: 8px;
+  min-height: 60px;
+  white-space: pre-wrap;
+  line-height: 1.45;
+  font-size: 15px;
+}
+
+/* 响应式翻译面板 */
+@media (max-width: 768px) {
+  .map-translate-box {
+    margin-top: 8px;
+    padding: 8px;
+  }
+  
+  .map-translate-input,
+  .map-translate-output {
+    font-size: 14px;
+  }
+  
+  .map-translate-input {
+    min-height: 70px;
+  }
+  
+  .map-translate-output {
+    min-height: 50px;
+  }
+  
+  .map-translate-box h4 {
+    font-size: 16px;
+    margin-bottom: 6px;
+  }
+}
+
+.map-translate-box h4 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+
+.map-translate-input {
+  width: 100%;
+  resize: vertical;
+  min-height: 96px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 16px;
+  font-family: inherit;
+  margin-bottom: 8px;
+}
+
+.map-translate-output {
+  margin-top: 8px;
+  border: 1px solid #e1d8c0;
+  border-radius: 8px;
+  background: #fcfaf3;
+  padding: 8px;
+  min-height: 72px;
+  white-space: pre-wrap;
+  line-height: 1.45;
+  font-size: 15px;
 }
 
 .news-top-btn-wrap {
@@ -861,6 +1377,11 @@ ul {
 }
 
 @media (max-width: 1200px) {
+  .news-layout {
+    min-height: auto;
+    height: auto;
+  }
+
   .market-card {
     min-width: 200px;
   }

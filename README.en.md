@@ -1,0 +1,143 @@
+# NewsRoom - Beginner-Safe Installation Guide (Linux/macOS)
+
+Language switch:
+
+- English (current)
+- 简体中文: `README.zh-CN.md`
+- Deutsch: `README.de-DE.md`
+
+## 1) What this project is
+
+NewsRoom is a local news aggregation + LLM analysis app.
+
+- Backend: FastAPI + SQLite
+- Frontend: React + Vite
+- Startup script: `start_local.sh`
+- Default local URLs:
+  - Frontend: `http://localhost:5173`
+  - Backend API docs: `http://localhost:8000/docs`
+
+## 2) Safety-first notes (read this first)
+
+- Do **not** run this project as root.
+- Do **not** commit `backend/.env`.
+- API keys are only stored locally in `backend/.env`.
+- `start_local.sh` does not auto-run `sudo` system installs.
+- If dependencies are missing, the script prints install commands, then exits.
+
+## 3) Fresh Linux machine (zero-prep) installation
+
+### 3.1 Install base tools
+
+Ubuntu/Debian:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y git curl python3 python3-venv python3-pip nodejs npm
+```
+
+Fedora:
+
+```bash
+sudo dnf install -y git curl python3 python3-virtualenv nodejs npm
+```
+
+Arch:
+
+```bash
+sudo pacman -S --needed git curl python nodejs npm
+```
+
+### 3.2 Clone and run
+
+```bash
+git clone <your-repo-url>
+cd NewsRoom
+chmod +x start_local.sh
+./start_local.sh
+```
+
+Optional language shortcut:
+
+```bash
+./start_local.sh --lang en
+./start_local.sh --lang zh
+./start_local.sh --lang de
+```
+
+## 4) First-run behavior
+
+On first run, `start_local.sh` will:
+
+1. Ask your preferred UI language (saved to `.startup_lang`)
+2. Check runtime versions (`python3>=3.10`, `node>=18`, `npm`)
+3. Create `backend/.env` from `.env.example` if needed
+4. Optionally guide LLM provider setup (Ollama/OpenAI/Gemini)
+5. Create `.venv`
+6. Install backend/frontend dependencies (with your confirmation)
+7. Start backend + frontend
+
+On later runs (already configured), it reuses your saved language automatically.
+
+## 5) LLM provider setup
+
+You can choose one provider:
+
+- `ollama` (local or cloud)
+- `openai`
+- `gemini`
+
+The script asks interactively if your provider is incomplete.
+
+Manual config file: `backend/.env`
+
+```env
+LLM_PROVIDER=ollama
+OLLAMA_URL=http://localhost:11434
+OLLAMA_MODEL=gpt-oss:120b-cloud
+
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-4o-mini
+GEMINI_API_KEY=
+GEMINI_MODEL=gemini-1.5-flash
+```
+
+## 6) Daily usage
+
+Start:
+
+```bash
+./start_local.sh
+```
+
+Stop:
+
+- Press `Ctrl+C` in the terminal where script is running.
+
+Logs:
+
+- `logs/config_meta.log`
+- `logs/runtime.log`
+
+## 7) Troubleshooting
+
+1. Missing dependency error at startup
+   - Install missing packages using printed command.
+   - Re-run `./start_local.sh`.
+
+2. LLM request fails (`Load failed`)
+   - Verify provider endpoint/API key.
+   - Lower analysis limit in UI.
+   - Try a faster/smaller model first.
+
+3. Browser does not auto-open
+   - Open manually: `http://localhost:5173`
+
+## 8) Repository files you should know
+
+- `start_local.sh`: interactive startup helper
+- `.env.example`: safe template
+- `backend/.env`: local secrets (never commit)
+- `THIRD_PARTY_NOTICES.md`: dependencies + detected licenses
+- `ACKNOWLEDGEMENTS.md`: open-source acknowledgements
+- `LICENSE`: project license

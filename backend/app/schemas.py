@@ -66,6 +66,9 @@ class LlmChatIn(BaseModel):
     message: str
     mode: str = "filtered"
     use_news_context: bool = True
+    ui_lang: str | None = None
+    use_chat_history: bool = True
+    history_turns: int = 10
     q: str | None = None
     source_id: int | None = None
     region: str | None = None
@@ -78,6 +81,60 @@ class LlmChatOut(BaseModel):
     provider: str
     model: str
     used_news_count: int
+
+
+class LlmSelectNewsIn(BaseModel):
+    instruction: str
+    mode: str = "filtered"
+    q: str | None = None
+    source_id: int | None = None
+    region: str | None = None
+    news_ids: list[int] = []
+    limit: int = 500
+
+
+class LlmSelectNewsItemOut(BaseModel):
+    id: int
+    title: str
+    source: str
+    url: str
+    published_at: datetime | None = None
+
+
+class LlmSelectNewsOut(BaseModel):
+    selected_ids: list[int]
+    selected_items: list[LlmSelectNewsItemOut]
+    provider: str
+    model: str
+    scanned_news_count: int
+    reason: str
+
+
+class LlmRefineRerunIn(BaseModel):
+    message: str
+    previous_answer: str
+    mode: str = "filtered"
+    use_news_context: bool = True
+    ui_lang: str | None = None
+    use_chat_history: bool = True
+    history_turns: int = 10
+    q: str | None = None
+    source_id: int | None = None
+    region: str | None = None
+    news_ids: list[int] = []
+    limit: int = 30
+
+
+class LlmRefineRerunOut(BaseModel):
+    answer: str
+    provider: str
+    model: str
+    used_news_count: int
+    selected_ids: list[int]
+    added_ids: list[int]
+    selected_items: list[LlmSelectNewsItemOut]
+    keywords: list[str]
+    missing_points: list[str]
 
 
 class LlmModelSelectIn(BaseModel):
@@ -122,6 +179,7 @@ class MarketItemOut(BaseModel):
     label: str
     symbol: str
     source: str
+    source_url: str | None = None
     price: float | None
     unit: str
     change_pct: float | None
@@ -140,3 +198,16 @@ class FinanceHeadlineOut(BaseModel):
     title: str
     url: str
     published_at: datetime | None
+
+
+class TranslateIn(BaseModel):
+    text: str
+    source_lang: str = "auto"
+    target_lang: str = "en"
+
+
+class TranslateOut(BaseModel):
+    translated_text: str
+    source_lang: str
+    target_lang: str
+    provider: str

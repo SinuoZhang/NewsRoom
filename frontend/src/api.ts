@@ -104,6 +104,9 @@ export type LlmChatIn = {
   message: string;
   mode: "filtered" | "all" | "selected";
   use_news_context?: boolean;
+  ui_lang?: "zh" | "en" | "de";
+  use_chat_history?: boolean;
+  history_turns?: number;
   q?: string;
   source_id?: number;
   region?: string;
@@ -125,6 +128,64 @@ export type LlmModelsOut = {
   can_switch: boolean;
 };
 
+export type LlmSelectNewsIn = {
+  instruction: string;
+  mode: "filtered" | "all" | "selected";
+  q?: string;
+  source_id?: number;
+  region?: string;
+  news_ids?: number[];
+  limit?: number;
+};
+
+export type LlmSelectNewsOut = {
+  selected_ids: number[];
+  selected_items: Array<{
+    id: number;
+    title: string;
+    source: string;
+    url: string;
+    published_at: string | null;
+  }>;
+  provider: string;
+  model: string;
+  scanned_news_count: number;
+  reason: string;
+};
+
+export type LlmRefineRerunIn = {
+  message: string;
+  previous_answer: string;
+  mode: "filtered" | "all" | "selected";
+  use_news_context?: boolean;
+  ui_lang?: "zh" | "en" | "de";
+  use_chat_history?: boolean;
+  history_turns?: number;
+  q?: string;
+  source_id?: number;
+  region?: string;
+  news_ids?: number[];
+  limit?: number;
+};
+
+export type LlmRefineRerunOut = {
+  answer: string;
+  provider: string;
+  model: string;
+  used_news_count: number;
+  selected_ids: number[];
+  added_ids: number[];
+  selected_items: Array<{
+    id: number;
+    title: string;
+    source: string;
+    url: string;
+    published_at: string | null;
+  }>;
+  keywords: string[];
+  missing_points: string[];
+};
+
 export type LlmMemoryItem = {
   ts: string;
   role: "user" | "assistant" | "system";
@@ -138,6 +199,7 @@ export type MarketItem = {
   label: string;
   symbol: string;
   source: string;
+  source_url?: string | null;
   price: number | null;
   unit: string;
   change_pct: number | null;
@@ -156,6 +218,19 @@ export type FinanceHeadline = {
   title: string;
   url: string;
   published_at: string | null;
+};
+
+export type TranslateIn = {
+  text: string;
+  source_lang?: string;
+  target_lang: string;
+};
+
+export type TranslateOut = {
+  translated_text: string;
+  source_lang: string;
+  target_lang: string;
+  provider: string;
 };
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -199,6 +274,11 @@ export const api = {
     if (params.region) query.set("region", params.region);
     return request<NewsCount>(`/api/news/count?${query.toString()}`);
   },
+  getNewsByIds: (ids: number[]) => {
+    const query = new URLSearchParams();
+    ids.forEach((id) => query.append("ids", String(id)));
+    return request<News[]>(`/api/news/by-ids?${query.toString()}`);
+  },
   getRegionCounts: () => request<RegionCounts>("/api/news/region-counts"),
   collectNews: () => request<CollectResult>("/api/collect/run", { method: "POST" }),
   getCollectStatus: () => request<CollectStatus>("/api/collect/status"),
@@ -210,11 +290,17 @@ export const api = {
       return requestWithTimeout<LlmChatOut>("/api/llm/chat", { method: "POST", body: JSON.stringify(reduced) }, 180000);
     }
   },
+  llmSelectNews: (payload: LlmSelectNewsIn) =>
+    requestWithTimeout<LlmSelectNewsOut>("/api/llm/select-news", { method: "POST", body: JSON.stringify(payload) }, 420000),
+  llmRefineRerun: (payload: LlmRefineRerunIn) =>
+    requestWithTimeout<LlmRefineRerunOut>("/api/llm/refine-rerun", { method: "POST", body: JSON.stringify(payload) }, 420000),
   getLlmModels: () => request<LlmModelsOut>("/api/llm/models"),
   selectLlmModel: (model: string) => request<LlmModelsOut>("/api/llm/models/select", { method: "POST", body: JSON.stringify({ model }) }),
   getLlmMemory: () => request<{ items: LlmMemoryItem[] }>("/api/llm/memory?hours=24"),
   clearLlmMemory: () => request<{ cleared: boolean }>("/api/llm/memory", { method: "DELETE" }),
   getMarketSnapshot: () => request<MarketSnapshot>("/api/market/snapshot"),
+  translateText: (payload: TranslateIn) =>
+    requestWithTimeout<TranslateOut>("/api/translate", { method: "POST", body: JSON.stringify(payload) }, 45000),
   getFinanceHeadlines: (limit = 8) => request<FinanceHeadline[]>(`/api/market/finance-news?limit=${limit}`),
   analyzeNews: (id: number) => request(`/api/analyze/${id}`, { method: "POST" }),
   getDailyOutlook: () => request<DailyOutlook>("/api/daily-outlook")
